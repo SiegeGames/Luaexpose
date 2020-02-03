@@ -1,0 +1,75 @@
+{{ for include in includes }}{{ include }}
+{{ end }}
+#include <sol/sol.hpp>
+
+namespace siege { 
+    void lua_expose_usertypes_{{ltype}}(sol::state& state) {
+        {{
+            if ui
+                "using namespace ui;"
+            end
+        }}
+        {{
+            func class_setup
+                format_user_type $.tp $.class
+            end            
+        }}
+        {{
+            func namespace_function_setup
+                format_namespace_function_setup $.tp $.func
+            end            
+        }}
+        {{
+           func namespace_setup
+             if $.tp.type_name_lower != "siege"
+                format_namespace_setup $.tp
+             end
+           end;           
+        }}
+        {{
+           func enum_setup
+              "state.new_enum(\"" + $.enum.name + "\",\n           "
+              for f in $.enum.items
+                "\"" + f.name + "\", " + $.enum.name + "::" + f.name
+                if !for.last
+                ",\n           "
+                end
+              end
+              "\n        );\n        "
+           end;           
+        }}
+        {{ for type in types }}
+        {{
+          if type.is_namespace
+            if ns == "types" 
+                "using namespace siege;\n"
+            else
+                "using namespace " + ns + ";\n"
+            end
+          end
+        }}
+        {{
+          for f in type.classes
+                class_setup tp: type class: f
+          end
+        }}
+        {{
+          for f in type.enums
+                enum_setup tp: type enum: f
+          end
+        }}
+        {{
+          if type.is_namespace
+            namespace_setup tp: type 
+          end
+        }}
+        {{
+          if type.is_namespace
+              for f in type.normal_functions
+                 namespace_function_setup tp: type func: f
+              end
+          end
+        }}
+        {{ end }}
+    }
+}
