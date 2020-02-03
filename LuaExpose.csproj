@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ConcurrentHashSet" Version="1.1.0" />
+    <PackageReference Include="Libclang" Version="9.0.0" />
+    <PackageReference Include="libClangSharp" Version="9.0.0-beta1" />
+    <PackageReference Include="Scriban" Version="2.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\my-cppast\src\CppAst\CppAst.csproj" />
+  </ItemGroup>
+
+</Project>
