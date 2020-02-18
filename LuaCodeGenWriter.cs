@@ -1,10 +1,8 @@
 ﻿using CppAst;
 using Scriban;
-using Scriban.Runtime;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -658,8 +656,6 @@ namespace LuaExpose
                 includeFiles.Enqueue($@"#include ""{y.Remove(0, 6).Replace('\\', '/')}""");
             });
 
-
-
             includes.AddRange(includeFiles);
 
             foreach (var lu in value.userTypes.Values)
@@ -710,6 +706,7 @@ namespace LuaExpose
             var scribe = Template.Parse(File.ReadAllText(template));
             return scribe.Render(new { Includes = includes.Distinct(), Ltype = fileName.FirstCharToUpper(), Namespaces = namespaces, Classes = classes, Enums = enums, Usings = usings });
         }
+
         void WriteAllFiles(string v, bool isGame)
         {
             foreach (var f in userTypeFiles)
