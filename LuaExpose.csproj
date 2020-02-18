@@ -6,14 +6,20 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ConcurrentHashSet" Version="1.1.0" />
-    <PackageReference Include="Libclang" Version="9.0.0" />
-    <PackageReference Include="libClangSharp" Version="9.0.0-beta1" />
-    <PackageReference Include="Scriban" Version="2.1.1" />
+    <Compile Remove="Extras\**" />
+    <EmbeddedResource Remove="Extras\**" />
+    <None Remove="Extras\**" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\my-cppast\src\CppAst\CppAst.csproj" />
+    <None Remove="README.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommandLineParser" Version="2.7.82" />
+    <PackageReference Include="ConcurrentHashSet" Version="1.1.0" />
+    <PackageReference Include="CppAst" Version="0.7.0" />
+    <PackageReference Include="Scriban" Version="2.1.1" />
   </ItemGroup>
 
 </Project>
