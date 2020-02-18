@@ -815,6 +815,10 @@ REPLACEMEWITHTEXT
 
         public void Run(string outLocation, bool isGame)
         {
+            Console.WriteLine($"Writing files to {outLocation}");
+
+            Directory.CreateDirectory(outLocation);
+
             ParseNamespace(rootNamespace);
             WriteAllFiles(outLocation, isGame);
         }
