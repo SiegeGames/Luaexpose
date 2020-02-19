@@ -10,10 +10,24 @@ using Scriban.Runtime;
 using System.Globalization;
 using System.Text;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using CommandLine;
 
 namespace LuaExpose
 {
+
+    public static class OperatingSystem
+    {
+        public static bool IsWindows() =>
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+
+        public static bool IsMacOS() =>
+            RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+
+        public static bool IsLinux() =>
+            RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+    }
+
     class Program
     {
         public class Options
@@ -45,17 +59,24 @@ namespace LuaExpose
 
         static void RunOptions(Options opts)
         {
+            Console.WriteLine(opts.ToString());
+
             var f = Directory.EnumerateFiles(opts.RootSource, "*.h", SearchOption.AllDirectories);
             CppParserOptions p = new CppParserOptions();
             p.ParseComments = false;
             p.Defines.Add("_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH");
             p.ParseSystemIncludes = false;
             p.AdditionalArguments.Add("-std=c++17");
+            if (OperatingSystem.IsMacOS())
+                p.AdditionalArguments.Add("-stdlib=libc++");
             p.AdditionalArguments.Add("-xc++");
             p.AdditionalArguments.Add("-Wno-pragma-once-outside-header");
             p.AdditionalArguments.Add("-Wno-unknown-attributes");
             p.IncludeFolders.Add(opts.RootSource);
-            p.IncludeFolders.Add(opts.SiegeSource);
+            if (!opts.IsGame)
+                p.IncludeFolders.Add(opts.SiegeSource);
+            else
+                p.SystemIncludeFolders.Add(opts.SiegeSource);
             p.SystemIncludeFolders.Add($"{opts.libs}\\SDL2\\include");
             p.SystemIncludeFolders.Add($"{opts.libs}\\parallel_hashmap\\include");
             p.SystemIncludeFolders.Add($"{opts.libs}\\bgfx\\include");

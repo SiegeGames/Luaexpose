@@ -52,6 +52,13 @@ namespace LuaExpose
             @"#include ""scripting/LuaCustomizations.h""",
         };
 
+        readonly List<string> globalGameHeaders = new List<string>
+        {
+            @"#include <base/Types.h>",
+            @"#include <scripting/LuaCustomizations.h>",
+            @"#include ""LuaUsertypes.h""",
+        };
+
         string template;
         CppNamespace rootNamespace;
         CppCompilation compiledCode;
@@ -416,7 +423,7 @@ namespace LuaExpose
                     for (int j = 0; j < constructors.Count(); j++)
                     {
                         var of = constructors.ElementAt(j);
-                        var paramList = string.Join(',', of.Parameters.Select(x => x.Type.GetDisplayName()));
+                        var paramList = string.Join(',', of.Parameters.Select(x => x.GetRealParamValue()));
 
                         // we found a type and we need to make shit happen
                         if (cccc != null && cccc.GetCanonicalType() is CppUnexposedType cxz)
@@ -637,9 +644,9 @@ namespace LuaExpose
             return currentOutput.ToString();
         }
 
-        string GetContentFromLuaUserFile(LuaUserTypeFile value, string fileName)
+        string GetContentFromLuaUserFile(LuaUserTypeFile value, string fileName, bool isGame)
         {
-            ConcurrentQueue<string> includeFiles = new ConcurrentQueue<string>(globalHeaders);
+            ConcurrentQueue<string> includeFiles = new ConcurrentQueue<string>(isGame ? globalGameHeaders : globalHeaders);
             List<string> usings = new List<string>();
 
             LinkedList<string> namespaces = new LinkedList<string>();
@@ -651,9 +658,16 @@ namespace LuaExpose
             {
                 var p = Path.GetFullPath(x.Value.OriginLocation);
                 int s = p.LastIndexOf("siege");
+                int offset = 6;
+                if (isGame)
+                {
+                    s = p.LastIndexOf("src");
+                    offset = 4;
+                }
+
                 var y = p.Substring(s).Replace("World.h", "World.hpp"); ;
 
-                includeFiles.Enqueue($@"#include ""{y.Remove(0, 6).Replace('\\', '/')}""");
+                includeFiles.Enqueue($@"#include ""{y.Remove(0, offset).Replace('\\', '/')}""");
             });
 
             includes.AddRange(includeFiles);
@@ -718,7 +732,7 @@ namespace LuaExpose
                     new System.IO.StreamWriter(newPath))
                 {
 
-                    var content = GetContentFromLuaUserFile(f.Value, Path.GetFileNameWithoutExtension(f.Key));
+                    var content = GetContentFromLuaUserFile(f.Value, Path.GetFileNameWithoutExtension(f.Key), isGame);
                     file.Write(content);
                 }
             }
@@ -734,7 +748,7 @@ namespace LuaExpose
             using (System.IO.StreamWriter file =
                 new System.IO.StreamWriter(newPath))
             {
-                var cppTemplate = @"#include ""scripting/usertypes/LuaUsertypes.h""
+                var cppTemplate = @"#include REPLACEMEWITHHEADER
 
 #include <sol/sol.hpp>
 
@@ -757,10 +771,12 @@ REPLACEMEWITHTEXT
                 var content = cppTemplate.Replace("REPLACEMEWITHTEXT", things.ToString());
                 if (isGame)
                 {
+                    content = content.Replace("REPLACEMEWITHHEADER", "\"LuaUsertypes.h\"");
                     content = content.Replace("REPLACEMESOMEMORE", "usertypes_Game");
                 }
                 else
                 {
+                    content = content.Replace("REPLACEMEWITHHEADER", "\"scripting/usertypes/LuaUsertypes.h\"");
                     content = content.Replace("REPLACEMESOMEMORE", "usertypes");
                 }
 

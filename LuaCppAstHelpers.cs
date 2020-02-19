@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using static LuaExpose.LuaCodeGenWriter;
 
 namespace LuaExpose
@@ -106,6 +107,37 @@ namespace LuaExpose
             Console.ForegroundColor = color;
 
             return true;
+        }
+
+        public static string GetRealParamValue(this CppParameter input)
+        {
+            StringBuilder x = new StringBuilder();
+            if (input.Type is CppReferenceType rf)
+            {
+                if (rf.ElementType is CppQualifiedType ct)
+                {
+                    if (ct.Qualifier == CppTypeQualifier.Const)
+                    {
+                        x.Append("const ");
+                    }
+                }
+                x.Append("&");
+            }
+
+            if (input.Type is CppQualifiedType xr)
+            {
+
+                    if (xr.Qualifier == CppTypeQualifier.Const)
+                    {
+                        x.Append("const ");
+                    }
+
+            }
+
+
+            x.Append(input.Name);
+            //    input.
+            return x.ToString();
         }
     }
 }
