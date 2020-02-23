@@ -114,28 +114,49 @@ namespace LuaExpose
             StringBuilder x = new StringBuilder();
             if (input.Type is CppReferenceType rf)
             {
-                if (rf.ElementType is CppQualifiedType ct)
+                var rt = rf.ElementType;
+                while (rt != null)
                 {
-                    if (ct.Qualifier == CppTypeQualifier.Const)
+                    if (rt is CppTypeWithElementType ct)
                     {
-                        x.Append("const ");
+                        rt = ct.ElementType;
+                    }
+                    else
+                    {
+                        if (rt.TypeKind == CppTypeKind.Unexposed)
+                        {
+                            x.Append(rt.GetDisplayName());
+                            break;
+                        }
                     }
                 }
+
                 x.Append("&");
             }
-
-            if (input.Type is CppQualifiedType xr)
+            else if (input.Type is CppQualifiedType zf)
             {
-
-                    if (xr.Qualifier == CppTypeQualifier.Const)
+                var rt = zf.ElementType;
+                while (rt != null)
+                {
+                    if (rt is CppTypeWithElementType ct)
                     {
-                        x.Append("const ");
+                        rt = ct.ElementType;
                     }
-
+                    else
+                    {
+                        if (rt.TypeKind == CppTypeKind.Unexposed)
+                        {
+                            x.Append(rt.GetDisplayName());
+                            break;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                x.Append(input.Type.GetDisplayName());
             }
 
-
-            x.Append(input.Name);
             //    input.
             return x.ToString();
         }

@@ -630,7 +630,7 @@ namespace LuaExpose
             currentOutput.Append($"state.new_enum(\"{e.Name}\",\n           ");
             for (int i = 0; i < e.Items.Count(); i++)
             {
-                currentOutput.Append($"\"{e.Items[i]}\", {e.Name}::{e.Items[i].Name}");
+                currentOutput.Append($"\"{e.Items[i].Name}\", {e.Name}::{e.Items[i].Name}");
                 if (i != e.Items.Count() - 1)
                 {
                     currentOutput.Append(",\n           ");
@@ -682,7 +682,7 @@ namespace LuaExpose
                     }
                     else
                     {
-                        usings.Add($"using namespace {fileName.ToLower()};");
+                        usings.Add($"using namespace {lu.OriginalElement.GetName().ToLower()};");
                         namespaces.AddLast(GenerateNamespaceSetup(lu));
                     }
 
