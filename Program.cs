@@ -112,6 +112,16 @@ namespace LuaExpose
 
                 p.AdditionalArguments.Add("-stdlib=libc++");
             }
+            
+            if (OperatingSystem.IsLinux())
+            { 
+                p.TargetAbi = "gnu";
+                p.TargetSystem = "linux";
+                p.AdditionalArguments.Add("-stdlib=libc++");
+                p.SystemIncludeFolders.Add($"/usr/include/c++/v1");
+                p.SystemIncludeFolders.Add($"/usr/lib/clang/9.0.1/include");
+                p.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
+            }
 
             if (OperatingSystem.IsWindows())
             {
@@ -165,3 +175,4 @@ namespace LuaExpose
 
     }
 }
+
