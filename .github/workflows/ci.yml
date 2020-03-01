@@ -10,7 +10,6 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Checkout Submodules
-        uses: actions/checkout@v2
         shell: bash
         run: |
           # If your submodules are configured to use SSH instead of HTTPS please uncomment the following line
