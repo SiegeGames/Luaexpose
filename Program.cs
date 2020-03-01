@@ -61,10 +61,13 @@ namespace LuaExpose
         {
             Console.WriteLine("Running Code Gen");
             var currentTime = 0L;
+            var last_run = @"last_run.txt";
+            if (opts.IsGame)
+                last_run = @"last_run_game.txt";
 
             try
             {
-                string text = File.ReadAllText(@"last_run.txt");
+                string text = File.ReadAllText(last_run);
                 currentTime = long.Parse(text);
             }
             catch (Exception)
@@ -157,7 +160,7 @@ namespace LuaExpose
 
 
             currentTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-            File.WriteAllText(@"last_run.txt", currentTime.ToString());
+            File.WriteAllText(last_run, currentTime.ToString());
         }
 
     }

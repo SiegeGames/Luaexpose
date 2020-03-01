@@ -740,56 +740,35 @@ namespace LuaExpose
             WriteLuaUserTypeFile(v, userTypeFiles, isGame);
         }
 
+
+        private void WriteFileContent(string content, string newPath)
+        {
+            using (System.IO.StreamWriter file =
+                new System.IO.StreamWriter(newPath))
+            {
+                file.Write(content);
+            }
+        }
+
         private void WriteLuaUserTypeFile(string v, Dictionary<string, LuaUserTypeFile> userTypeFiles, bool isGame)
         {
             var newFileName = $"LuaUsertypes.cpp";
             var newPath = Path.Combine(v, newFileName);
+            var fileExists = File.Exists(newPath);
 
-            using (System.IO.StreamWriter file =
-                new System.IO.StreamWriter(newPath))
-            {
-                var cppTemplate = @"#include REPLACEMEWITHHEADER
+            var cppTemplate = @"#include REPLACEMEWITHHEADER
 
 #include <sol/sol.hpp>
 
 namespace siege {
     void lua_expose_REPLACEMESOMEMORE(sol::state& state) {
+// BEGIN
 REPLACEMEWITHTEXT
+// END
      }
 }
-";              StringBuilder things = new StringBuilder();
-                foreach (var item in userTypeFiles)
-                {
-                    things.Append($"        lua_expose_usertypes_{Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()}(state);\n");
-                }
-
-                if (!isGame)
-                {
-                    things.Append($"        lua_expose_usertypes_Game(state);\n");
-                }
-
-                var content = cppTemplate.Replace("REPLACEMEWITHTEXT", things.ToString());
-                if (isGame)
-                {
-                    content = content.Replace("REPLACEMEWITHHEADER", "\"LuaUsertypes.h\"");
-                    content = content.Replace("REPLACEMESOMEMORE", "usertypes_Game");
-                }
-                else
-                {
-                    content = content.Replace("REPLACEMEWITHHEADER", "\"scripting/usertypes/LuaUsertypes.h\"");
-                    content = content.Replace("REPLACEMESOMEMORE", "usertypes");
-                }
-
-                file.Write(content);
-            }
-
-            newFileName = $"LuaUsertypes.h";
-            newPath = Path.Combine(v, newFileName);
-
-            using (System.IO.StreamWriter file =
-            new System.IO.StreamWriter(newPath))
-            {
-                var cppTemplate = @"#pragma once
+";
+            var cppHeaderTemplate = @"#pragma once
 
 namespace sol {
     class state;
@@ -798,32 +777,79 @@ namespace sol {
 namespace siege {
 
     void lua_expose_REPLACEMESOMEMORE(sol::state& state);
+// BEGIN
 REPLACEMEWITHTEXT
+// END
 }
-"; 
-                StringBuilder things = new StringBuilder();
-                foreach (var item in userTypeFiles)
-                {
-                    things.Append($"    void lua_expose_usertypes_{Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()}(sol::state& state);\n");
-                }
-
-                if (!isGame)
-                {
-                    things.Append($"        extern void lua_expose_usertypes_Game(sol::state& state);\n");
-                }
-
-                var content = cppTemplate.Replace("REPLACEMEWITHTEXT", things.ToString());
-                if (isGame)
-                {
-                    content = content.Replace("REPLACEMESOMEMORE", "usertypes_Game");
-                }
-                else
-                {
-                    content = content.Replace("REPLACEMESOMEMORE", "usertypes");
-                }
-
-                file.Write(content);
+";
+            StringBuilder fileContent = new StringBuilder();
+            var currentContent = "";
+            // this is a case where we need to load the file and append potentially ? 
+            if (fileExists)
+            {
+                currentContent = File.ReadAllText(newPath).GetTextBetween("// BEGIN", "// END").Trim();
+                fileContent.Append(currentContent);
             }
+
+            foreach (var item in userTypeFiles)
+            {
+                if (!currentContent.Contains(Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()))
+                    fileContent.Append($"        lua_expose_usertypes_{Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()}(state);\n");
+            }
+
+            if (!isGame)
+            {
+                if (!currentContent.Contains("usertypes_Game"))
+                    fileContent.Append($"        lua_expose_usertypes_Game(state);\n");
+            }
+
+            var content = cppTemplate.Replace("REPLACEMEWITHTEXT", fileContent.ToString());
+            if (isGame)
+            {
+                content = content.Replace("REPLACEMEWITHHEADER", "\"LuaUsertypes.h\"");
+                content = content.Replace("REPLACEMESOMEMORE", "usertypes_Game");
+            }
+            else
+            {
+                content = content.Replace("REPLACEMEWITHHEADER", "\"scripting/usertypes/LuaUsertypes.h\"");
+                content = content.Replace("REPLACEMESOMEMORE", "usertypes");
+            }
+
+            WriteFileContent(content, newPath);
+
+            newFileName = $"LuaUsertypes.h";
+            newPath = Path.Combine(v, newFileName);
+
+            fileContent.Clear();
+            if (fileExists)
+            {
+                currentContent = File.ReadAllText(newPath).GetTextBetween("// BEGIN", "// END").Trim();
+                fileContent.Append(currentContent);
+            }
+
+            foreach (var item in userTypeFiles)
+            {
+                if (!currentContent.Contains(Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()))
+                    fileContent.Append($"    void lua_expose_usertypes_{Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()}(sol::state& state);\n");
+            }
+
+            if (!isGame)
+            {
+                if (!currentContent.Contains("usertypes_Game"))
+                    fileContent.Append($"    extern void lua_expose_usertypes_Game(sol::state& state);\n");
+            }
+
+            content = cppHeaderTemplate.Replace("REPLACEMEWITHTEXT", fileContent.ToString());
+            if (isGame)
+            {
+                content = content.Replace("REPLACEMESOMEMORE", "usertypes_Game");
+            }
+            else
+            {
+                content = content.Replace("REPLACEMESOMEMORE", "usertypes");
+            }
+
+            WriteFileContent(content, newPath);
         }
 
         public void Run(string outLocation, bool isGame)
