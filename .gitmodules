@@ -1,0 +1,4 @@
+[submodule "Ext/CppAst"]
+	path = Ext/CppAst
+	url = git@github.com:wackoisgod/CppAst.git
+	branch = ext_projects 

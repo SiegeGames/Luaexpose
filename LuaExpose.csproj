@@ -9,6 +9,9 @@
     <Compile Remove="Extras\**" />
     <EmbeddedResource Remove="Extras\**" />
     <None Remove="Extras\**" />
+    <Compile Remove="Ext\**" />
+    <EmbeddedResource Remove="Ext\**" />
+    <None Remove="Ext\**" />
   </ItemGroup>
 
   <ItemGroup>
