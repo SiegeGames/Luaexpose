@@ -21,8 +21,11 @@
   <ItemGroup>
     <PackageReference Include="CommandLineParser" Version="2.7.82" />
     <PackageReference Include="ConcurrentHashSet" Version="1.1.0" />
-    <PackageReference Include="CppAst" Version="0.7.0" />
     <PackageReference Include="Scriban" Version="2.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Ext\CppAst\src\CppAst\CppAst.csproj" />
   </ItemGroup>
 
 </Project>
