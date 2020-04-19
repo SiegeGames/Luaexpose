@@ -119,6 +119,12 @@ namespace LuaExpose
                 p.TargetSystem = "linux";
                 p.AdditionalArguments.Add("-stdlib=libc++");
                 p.SystemIncludeFolders.Add($"/usr/include/c++/v1");
+                p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu");
+                p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/8");
+                p.SystemIncludeFolders.Add($"/usr/include/c++/7");
+                p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu");
+                p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/8");
+                p.SystemIncludeFolders.Add($"/usr/lib/clang/9.0.0/include");
                 p.SystemIncludeFolders.Add($"/usr/lib/clang/9.0.1/include");
                 p.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
             }
