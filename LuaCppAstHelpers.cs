@@ -21,6 +21,10 @@ namespace LuaExpose
         {
             return input.Attributes.Any(x => x.Name == "LUA_FUNC");
         }
+        public static bool IsMetaFunc(this CppFunction input)
+        {
+            return input.Attributes.Any(x => x.Name == "LUA_META_FUNC");
+        }
         public static bool IsOverloadFunc(this CppFunction input)
         {
             return input.Attributes.Any(x => x.Name == "LUA_FUNC_OVERLOAD");
@@ -43,7 +47,11 @@ namespace LuaExpose
         }
         public static List<CppFunction> GetNormalFunctions(this LuaUserType input)
         {
-            return (input.OriginalElement as ICppDeclarationContainer).Functions.Where(x => x.IsNormalFunc()).ToList();
+            return (input.OriginalElement as ICppDeclarationContainer).Functions.Where(x => x.IsNormalFunc() || x.IsOverloadFunc()).ToList();
+        }
+        public static List<CppFunction> GetMetaFunctions(this LuaUserType input)
+        {
+            return (input.OriginalElement as ICppDeclarationContainer).Functions.Where(x => x.IsMetaFunc()).ToList();
         }
         public static List<CppEnum> GetEnums(this LuaUserType input)
         {
@@ -79,16 +87,29 @@ namespace LuaExpose
 
         public static string ConvertToSiegeType(this CppType input)
         {
-            switch (input.GetDisplayName())
-            {
-                case "basic_function":
-                    return "sol::function";
-                case "variadic_args":
-                    return "sol::variadic_args";
-                case "basic_string":
-                    return "String";
+            var x = input.GetDisplayName();
+            if (x.Contains("basic_function")) {
+                return x.Replace("basic_function", "sol::function");
+            }
+            if (x.Contains("variadic_args")) {
+                return x.Replace("variadic_args", "sol::variadic_args");
+            }
+            if (x.Contains("basic_string")) {
+                return x.Replace("basic_string", "String");
+            }
+
+            return input.GetDisplayName();
+        }
+
+        public static string ConvertToMetaEnum(string value)
+        {
+            switch (value) {
+                case "index":
+                return "meta_function::index";
+                break;
                 default:
-                    return input.GetDisplayName();
+                    return "";
+                break;
             }
         }
 

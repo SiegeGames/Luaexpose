@@ -5,7 +5,7 @@ VisualStudioVersion = 16.0.29519.181
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LuaExpose", "LuaExpose.csproj", "{6090D059-0B4B-4B0A-9B41-89DD0451EDA1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CppAst", "Ext\CppAst\src\CppAst\CppAst.csproj", "{99EBF789-9B66-48F4-AB1F-0F15BF75F239}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CppAst", "Ext\CppAst\src\CppAst\CppAst.csproj", "{4ADFBED6-09B6-428E-ABDD-618F129C01E1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,10 +17,10 @@ Global
 		{6090D059-0B4B-4B0A-9B41-89DD0451EDA1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6090D059-0B4B-4B0A-9B41-89DD0451EDA1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6090D059-0B4B-4B0A-9B41-89DD0451EDA1}.Release|Any CPU.Build.0 = Release|Any CPU
-		{99EBF789-9B66-48F4-AB1F-0F15BF75F239}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{99EBF789-9B66-48F4-AB1F-0F15BF75F239}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{99EBF789-9B66-48F4-AB1F-0F15BF75F239}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{99EBF789-9B66-48F4-AB1F-0F15BF75F239}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4ADFBED6-09B6-428E-ABDD-618F129C01E1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4ADFBED6-09B6-428E-ABDD-618F129C01E1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4ADFBED6-09B6-428E-ABDD-618F129C01E1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4ADFBED6-09B6-428E-ABDD-618F129C01E1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

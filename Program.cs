@@ -80,6 +80,9 @@ namespace LuaExpose
             p.ParseComments = false;
             p.Defines.Add("_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH");
             p.ParseSystemIncludes = false;
+            p.ParseAttributes = true;
+            p.ParseAsCpp = true;
+
             p.AdditionalArguments.Add("-std=c++17");
             
             p.AdditionalArguments.Add("-xc++");
@@ -107,6 +110,7 @@ namespace LuaExpose
                 p.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1");
                 p.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
                 p.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/11.0.0/include");
+                p.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/11.0.3/include");
                 p.SystemIncludeFolders.Add($"{opts.libs}/bgfx/include/compat/osx");
                 p.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
 
@@ -125,7 +129,6 @@ namespace LuaExpose
                 p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu");
                 p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/8");
                 p.SystemIncludeFolders.Add($"/usr/lib/clang/9.0.0/include");
-                p.SystemIncludeFolders.Add($"/usr/lib/clang/9.0.1/include");
                 p.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
             }
 
@@ -137,12 +140,12 @@ namespace LuaExpose
             p.SystemIncludeFolders.Add($"{opts.SiegeSource}/external");
 
 
-            var actualFiles = f.Where(x =>
-            {
-                DateTimeOffset dto = (new FileInfo(x)).LastWriteTime;
-                return dto.ToUnixTimeMilliseconds() > currentTime;
-            });
-
+            //var actualFiles = f.Where(x =>
+            //{
+            //    DateTimeOffset dto = (new FileInfo(x)).LastWriteTime;
+            //    return true;
+            //});
+            var actualFiles = f;
             if (actualFiles.Count() == 0)
             {
                 Console.WriteLine("No new files to parse");

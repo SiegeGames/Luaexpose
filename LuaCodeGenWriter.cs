@@ -200,6 +200,9 @@ namespace LuaExpose
             // them from the parent list so we don't iterate over them anymore in the future
             var functionsWithSameName = parentContainer.Functions.Where(x => x.Name == cpp.Name && (x.IsNormalFunc() || x.IsOverloadFunc()));
 
+
+            var overloadFunctions = parentContainer.Functions.Where(x => x.Name == cpp.Name && (x.IsOverloadFunc()));
+
             StringBuilder currentOutput = new StringBuilder();
             var fullyQualifiedFunctionName = $"{lu.TypeNameLower}::{cpp.Name}";
             if (lu.TypeNameLower == "siege")
@@ -209,7 +212,7 @@ namespace LuaExpose
 
             // in the case of one we can just bind the function
             // without resolving the overload of the params 
-            if (functionsWithSameName.Count() == 1)
+            if (functionsWithSameName.Count() == 1 && overloadFunctions.Count() == 0)
             {
                 // these are global functions and just get thrown into the state
                 if (lu.TypeNameLower == "siege")
@@ -218,7 +221,26 @@ namespace LuaExpose
                 }
                 else // namespaces functions
                 {
-                    currentOutput.Append($"{lu.TypeNameLower}.set_function(\"{cpp.Name}\", &{fullyQualifiedFunctionName});\n        ");
+                    // check and see if this should be a static function? 
+                    if (cpp.Attributes[0].Arguments == "use_static") {
+                        // in this case we have to do something like an overload. 
+                        var paramList = string.Join(',', cpp.Parameters.Select(x => x.Type.ConvertToSiegeType()));
+                        bool constReturn = false;
+                        if (cpp.ReturnType is CppAst.CppQualifiedType qr)
+                            constReturn = qr.Qualifier == CppTypeQualifier.Const;
+                        if (cpp.ReturnType is CppAst.CppReferenceType rt && rt.ElementType is CppQualifiedType qt)
+                            constReturn = qt.Qualifier == CppTypeQualifier.Const;
+
+
+                        var methodConst = cpp.Flags.HasFlag(CppFunctionFlags.Const);
+
+                        currentOutput.Append($"{lu.TypeNameLower}.set_function(\"{cpp.Name}\", static_cast<{cpp.ReturnType.GetDisplayName()} (*)({paramList})");
+                        currentOutput.Append($" {(methodConst ? "const" : "")} > (&{fullyQualifiedFunctionName}));\n        ");
+                    }
+                    else {
+                        currentOutput.Append($"{lu.TypeNameLower}.set_function(\"{cpp.Name}\", &{fullyQualifiedFunctionName});\n        ");
+                    }
+
                 }
             }
             else
@@ -242,9 +264,8 @@ namespace LuaExpose
                 for (int i = 0; i < functionsWithSameName.Count(); i++)
                 {
                     var of = functionsWithSameName.ElementAt(i);
-
                     currentOutput.Append($"sol::resolve<{cpp.ReturnType.GetDisplayName()}(");
-                    var paramList = string.Join(',', of.Parameters.Select(x => x.Type.GetDisplayName()));
+                    var paramList = string.Join(',', of.Parameters.Select(x => x.Type.ConvertToSiegeType()));
                     currentOutput.Append($"{paramList})>(&{fullyQualifiedFunctionName})");
 
                     if (i != functionsWithSameName.Count() - 1)
@@ -426,9 +447,10 @@ namespace LuaExpose
                         var paramList = string.Join(',', of.Parameters.Select(x => x.GetRealParamValue()));
 
                         // we found a type and we need to make shit happen
-                        if (cccc != null && cccc.GetCanonicalType() is CppUnexposedType cxz)
+                        if (cccc != null && !string.IsNullOrEmpty(paramList) && cccc.GetCanonicalType() is CppClass cxz)
                         {
-                            var t_type = cxz.GetDisplayName().Split('<', '>')[1].Split(',')[0];
+                            var t_type = cxz.TemplateParameters.Count() > 0 ? cxz.TemplateParameters[0].GetDisplayName() : "";
+                           // var t_type = cxz.GetDisplayName().Split('<', '>')[1].Split(',')[0];
                             paramList = paramList.Replace("T", t_type);
                         }
 
@@ -534,8 +556,29 @@ namespace LuaExpose
                     }
                     else
                     {
-                        funcStringBuilder.Append($"\"{ff.Name}\", &{fullyQualifiedFunctionName}{ff.Name}");
-                        funcStringBuilder.Append("\n            ");
+                        // check and see if this should be a static function? 
+                        if (ff.Attributes[0].Arguments == "use_static") {
+                            // in this case we have to do something like an overload. 
+                            var paramList = string.Join(',', ff.Parameters.Select(x => x.Type.ConvertToSiegeType()));
+                            bool constReturn = false;
+                            if (ff.ReturnType is CppAst.CppQualifiedType qr)
+                                constReturn = qr.Qualifier == CppTypeQualifier.Const;
+                            if (ff.ReturnType is CppAst.CppReferenceType rt && rt.ElementType is CppQualifiedType qt)
+                                constReturn = qt.Qualifier == CppTypeQualifier.Const;
+
+
+                            var methodConst = ff.Flags.HasFlag(CppFunctionFlags.Const);
+
+                            funcStringBuilder.Append($"\"{ff.Name}\", static_cast<{ff.ReturnType.GetDisplayName()} ({fullyQualifiedFunctionName}*)({paramList})");
+                            funcStringBuilder.Append($" {(methodConst ? "const" : "")} > (&{ fullyQualifiedFunctionName}{ ff.Name})");
+
+
+                            funcStringBuilder.Append("\n            ");
+                        }
+                        else {
+                            funcStringBuilder.Append($"\"{ff.Name}\", &{fullyQualifiedFunctionName}{ff.Name}");
+                            funcStringBuilder.Append("\n            ");
+                        }
                     }
 
                     functionStrings.Add(funcStringBuilder.ToString());
@@ -618,7 +661,25 @@ namespace LuaExpose
                 currentOutput.Append(string.Join(",", functionStrings));
 
                 currentOutput.Append($");\n        ");
+
+
+                var metaFunctions = cpp.Functions.Where(z => z.IsMetaFunc());
+                if (metaFunctions.Count() != 0) {
+                    foreach (var m in metaFunctions) {
+                        currentOutput.Append($"\n\n        ");
+                        currentOutput.Append($"state[\"{typeList[i]}\"][sol::{CppExtenstions.ConvertToMetaEnum(m.Attributes[0].Arguments)}]");
+                        currentOutput.Append($" = &{fullyQualifiedFunctionName}{m.Name};");
+                        currentOutput.Append($"\n\n        ");
+                    }
+
+
+
+                    Console.WriteLine("Mets Func");
+                }
             }
+
+
+           
 
             return currentOutput.ToString();
         }
