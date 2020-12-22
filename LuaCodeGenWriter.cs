@@ -210,6 +210,34 @@ namespace LuaExpose
                 fullyQualifiedFunctionName = $"{cpp.Name}";
             }
 
+            //var forwardFunctions = parentContainer.Functions.Where(x => x.Name == cpp.Name && x.IsFowardFunc());
+            //foreach (var m in forwardFunctions) {
+            //    var funcStringBuilder = new StringBuilder();
+            //    // LUA_FORWARD_FUNC(arg=int, arg=int, return=void)
+
+            //    var cc = m.Attributes[0].Arguments.Split(',');
+            //    var returnString = "void";
+
+            //    var argBuilder = new StringBuilder();
+            //    var callBuilder = new StringBuilder();
+            //    int index = 0;
+            //    foreach (var item in cc) {
+            //        var zz = item.Split('=');
+            //        if (zz[0] == "arg") {
+            //            callBuilder.Append($"arg{index}, ");
+
+            //            argBuilder.Append($",{zz[1]} arg{index++}");
+            //        }
+            //        else if (zz[0] == "return")
+            //            returnString = zz[1];
+            //    }
+
+            //    funcStringBuilder.Append($"{lu.TypeNameLower}.set_function(\"{cpp.Name}\", []({lu.TypeNameLower}& o{argBuilder}){{ o.{m.Name}({callBuilder})}}");
+            //    funcStringBuilder.Append("\n            ");
+
+            //    currentOutput.Append(funcStringBuilder.ToString());
+            //}
+
             // in the case of one we can just bind the function
             // without resolving the overload of the params 
             if (functionsWithSameName.Count() == 1 && overloadFunctions.Count() == 0)
@@ -519,18 +547,24 @@ namespace LuaExpose
                 var overloadFunctions = functionList.Where(xsd => xsd.IsOverloadFunc());
 
                 var functionsWithSameName = functionList.GroupBy(x => x.Name).Where(group => group.Count() > 1).SelectMany(z => z).ToList();
-
                 functionsWithSameName.AddRange(overloadFunctions);
+
+                var foundStaticFuncs = functionList.Where(xsd => xsd.IsNormalStaticFunc()).Select(x => x.Name).ToList();
+
                 for (int w = 0; w < functionList.Count(); w++)
                 {
                     var funcStringBuilder = new StringBuilder();
                     var ff = functionList[w];
-                    if (functionsWithSameName.Any(x => x.Name == ff.Name))
+                    var shouldAttemptStatic = ff.IsNormalStaticFunc() || foundStaticFuncs.Contains(ff.Name);
+
+                    if (functionsWithSameName.Any(x => x.Name == ff.Name) && !shouldAttemptStatic)
                     {
                         var yy = functionsWithSameName.Where(z => z.Name == ff.Name).ToList();
                         funcStringBuilder.Append($"\"{ff.Name}\", sol::overload(\n            ");
                         for (int a = 0; a < yy.Count(); a++)
                         {
+                            var methodConst = ff.Flags.HasFlag(CppFunctionFlags.Const);
+
                             var isClass = yy[a].ReturnType is CppClass;
                             if (isClass)
                             {
@@ -543,7 +577,7 @@ namespace LuaExpose
                             
                             var paramList = string.Join(',', yy[a].Parameters.Select(x => x.Type.ConvertToSiegeType()));
 
-                            funcStringBuilder.Append($"{paramList})>(&{fullyQualifiedFunctionName}{yy[a].Name})");
+                            funcStringBuilder.Append($"{paramList}) {(methodConst ? "const" : "")} >(&{fullyQualifiedFunctionName}{yy[a].Name})");
 
                             if (a != yy.Count() - 1)
                             {
@@ -557,7 +591,7 @@ namespace LuaExpose
                     else
                     {
                         // check and see if this should be a static function? 
-                        if (ff.Attributes[0].Arguments == "use_static") {
+                        if (ff.Attributes[0].Arguments == "use_static" || shouldAttemptStatic) {
                             // in this case we have to do something like an overload. 
                             var paramList = string.Join(',', ff.Parameters.Select(x => x.Type.ConvertToSiegeType()));
                             bool constReturn = false;
@@ -640,6 +674,68 @@ namespace LuaExpose
                     }
                 }
 
+                var metaFunctions = cpp.Functions.Where(z => z.IsMetaFunc());
+                if (metaFunctions.Count() != 0) {
+                    foreach (var m in metaFunctions) {
+                        var funcStringBuilder = new StringBuilder();
+                        funcStringBuilder.Append($"sol::{CppExtenstions.ConvertToMetaEnum(m.Attributes[0].Arguments)}, &{fullyQualifiedFunctionName}{m.Name}");
+                        funcStringBuilder.Append("\n            ");
+
+                        functionStrings.Add(funcStringBuilder.ToString());
+                    }
+                }
+
+                var forwardFunctions = cpp.Functions.Where(z => z.IsFowardFunc());
+                foreach (var m in forwardFunctions) {
+                    var funcStringBuilder = new StringBuilder();
+                    // LUA_FORWARD_FUNC(arg=int, arg=int, return=void, caller={args})
+                    var cc = m.Attributes[0].Arguments.Split(',');
+                    var returnString = "void";
+                    var funcBindName = m.Name;
+                    var callerOverride = "";
+                    var argBuilder = new StringBuilder();
+                    var callBuilder = new StringBuilder();
+                    int index = 0;
+                    for (int z = 0; z < cc.Length; z++) {
+                        var item = cc[z];
+
+                        var zz = item.Split('=');
+                        if (zz[0] == "arg") {
+                            if (index != 0)
+                                callBuilder.Append($",");
+                            callBuilder.Append($"arg{index}");
+                            argBuilder.Append($",{zz[1]} arg{index++}");
+                        }
+                        else if (zz[0] == "return")
+                            returnString = zz[1];
+                        else if (zz[0] == "name")
+                            funcBindName = zz[1];
+                        else if (zz[0] == "caller")
+                            callerOverride = zz[1];
+                    }
+
+                    if (string.IsNullOrEmpty(callerOverride))
+                        callerOverride = $"{callBuilder}";
+                    else {
+                        callerOverride = callerOverride.Replace("args", callBuilder.ToString());
+                        var first = callerOverride.IndexOf('|');
+                        if (first != -1)
+                            callerOverride = callerOverride.Remove(first, 1).Insert(first, "(");
+                        first = callerOverride.IndexOf('|');
+                        if (first != -1)
+                            callerOverride = callerOverride.Remove(first, 1).Insert(first, ")");
+                    }
+
+                    var boolShouldReturn = returnString != "void";
+                    if (boolShouldReturn)
+                        returnString = $"-> {returnString}";
+
+                    funcStringBuilder.Append($"\"{funcBindName}\", []({typeList[i]}& o{argBuilder}) {(boolShouldReturn ? returnString : "")} {{ {(boolShouldReturn ? "return" : "")} o.{m.Name}({callerOverride}); }}");
+                    funcStringBuilder.Append("\n            ");
+
+                    functionStrings.Add(funcStringBuilder.ToString());
+                }
+
                 foreach (var f in fieldList)
                 {
                     var fieldStringBuilder = new StringBuilder();
@@ -661,21 +757,6 @@ namespace LuaExpose
                 currentOutput.Append(string.Join(",", functionStrings));
 
                 currentOutput.Append($");\n        ");
-
-
-                var metaFunctions = cpp.Functions.Where(z => z.IsMetaFunc());
-                if (metaFunctions.Count() != 0) {
-                    foreach (var m in metaFunctions) {
-                        currentOutput.Append($"\n\n        ");
-                        currentOutput.Append($"state[\"{typeList[i]}\"][sol::{CppExtenstions.ConvertToMetaEnum(m.Attributes[0].Arguments)}]");
-                        currentOutput.Append($" = &{fullyQualifiedFunctionName}{m.Name};");
-                        currentOutput.Append($"\n\n        ");
-                    }
-
-
-
-                    Console.WriteLine("Mets Func");
-                }
             }
 
 

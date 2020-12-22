@@ -21,9 +21,20 @@ namespace LuaExpose
         {
             return input.Attributes.Any(x => x.Name == "LUA_FUNC");
         }
+        public static bool IsNormalStaticFunc(this CppFunction input)
+        {
+            if (input.IsNormalFunc() && input.Attributes[0].Arguments != null)
+                return input.Attributes[0].Arguments.Contains("use_static");
+
+            return false;
+        }
         public static bool IsMetaFunc(this CppFunction input)
         {
             return input.Attributes.Any(x => x.Name == "LUA_META_FUNC");
+        }
+        public static bool IsFowardFunc(this CppFunction input)
+        {
+            return input.Attributes.Any(x => x.Name == "LUA_FORWARD_FUNC");
         }
         public static bool IsOverloadFunc(this CppFunction input)
         {
