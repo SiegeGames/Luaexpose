@@ -10,8 +10,6 @@ jobs:
         uses: actions/checkout@v2
       - name: Checkout submodules
         uses: textbook/git-checkout-submodule-action@master
-        with:
-          remote: true
 
       # - name: Checkout Submodules
       #   shell: bash
