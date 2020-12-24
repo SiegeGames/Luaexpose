@@ -33,3 +33,7 @@ jobs:
         with:
           name: linux
           path: bin/Release/net5.0/linux-x64/publish/
+      - uses: actions/upload-artifact@v1
+        with:
+          name: linux-ubuntu-18.04
+          path: bin/Release/net5.0/ubuntu.18.04-x64/publish/
