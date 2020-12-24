@@ -49,6 +49,9 @@ namespace LuaExpose
 
             [Option('g', "game", Required = false, HelpText = "Siege Source Dir")]
             public bool IsGame { get; set; }
+
+            [Option('c', "cpp", Required = false, HelpText = "Siege Source Dir")]
+            public string CppVersion { get; set; }
         }
 
         static void Main(string[] args)
@@ -125,10 +128,13 @@ namespace LuaExpose
                 p.SystemIncludeFolders.Add($"/usr/include/c++/v1");
                 p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu");
                 p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/8");
+                p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/9");
                 p.SystemIncludeFolders.Add($"/usr/include/c++/7");
+                p.SystemIncludeFolders.Add($"/usr/include/c++/9");
                 p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu");
                 p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/8");
-                p.SystemIncludeFolders.Add($"/usr/lib/clang/9.0.0/include");
+                p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/9");
+                p.SystemIncludeFolders.Add($"/usr/lib/clang/{opts.CppVersion}/include");
                 p.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
             }
 
