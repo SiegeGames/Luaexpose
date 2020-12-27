@@ -82,11 +82,12 @@ namespace LuaExpose
             CppParserOptions p = new CppParserOptions();
             p.ParseComments = false;
             p.Defines.Add("_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH");
+            p.Defines.Add("_HAS_DEPRECATED_RESULT_OF");
             p.ParseSystemIncludes = false;
             p.ParseAttributes = true;
             p.ParseAsCpp = true;
 
-            p.AdditionalArguments.Add("-std=c++17");
+            p.AdditionalArguments.Add("-std=c++2a");
             
             p.AdditionalArguments.Add("-xc++");
             p.AdditionalArguments.Add("-Wno-pragma-once-outside-header");
