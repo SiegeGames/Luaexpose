@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using static LuaExpose.LuaCodeGenWriter;
+using static LuaExpose.CodeGenWriter;
 
 namespace LuaExpose
 {
@@ -112,15 +112,190 @@ namespace LuaExpose
             return input.GetDisplayName();
         }
 
+        public static string GetTealName(this CppParameter input)
+        {
+            if ((input.Name == "" && input.Type.TypeKind == CppTypeKind.Unexposed && (input.Type as CppUnexposedType).Name == "T...") ||
+                (input.Name == "args" && input.Type.TypeKind == CppTypeKind.StructOrClass && (input.Type as CppClass).Name == "variadic_args"))
+            {
+                return "...";
+            }
+            else
+            {
+                return input.Name;
+            }
+        }
+
+        private static readonly Dictionary<string, string> TypeMappings = new Dictionary<string, string>
+        {
+            { "String", "string" },
+            { "Unicode", "string" },
+            { "Path", "string" },
+            { "EntityID", "number" },
+            { "ComponentID", "number" },
+            { "PrefabID", "number" },
+            { "TileID", "number" },
+            { "CallbackHandle", "number" },
+            { "basic_string", "string" },
+            { "basic_object", "any" },
+            { "basic_function", "any" },
+            { "basic_table_core", "any" },
+            { "state_view", "any" },
+            { "variadic_args", "any" },
+            { "T...", "any" },
+        };
+
+        public static string ConvertToTealType(this CppType input, CppTypedef specialization = null)
+        {
+            switch (input.TypeKind)
+            {
+                case CppTypeKind.Primitive:
+                    var primitive = input as CppPrimitiveType;
+                    switch (primitive.Kind)
+                    {
+                        case CppPrimitiveKind.Void:
+                            return String.Empty;
+                        case CppPrimitiveKind.Bool:
+                            return "boolean";
+                        case CppPrimitiveKind.WChar:
+                        case CppPrimitiveKind.Char:
+                            return "string";
+                        case CppPrimitiveKind.Short:
+                        case CppPrimitiveKind.Int:
+                        case CppPrimitiveKind.LongLong:
+                        case CppPrimitiveKind.UnsignedChar:
+                        case CppPrimitiveKind.UnsignedShort:
+                        case CppPrimitiveKind.UnsignedInt:
+                        case CppPrimitiveKind.UnsignedLongLong:
+                        case CppPrimitiveKind.Float:
+                        case CppPrimitiveKind.Double:
+                        case CppPrimitiveKind.LongDouble:
+                        default:
+                            return "number";
+                    }
+                case CppTypeKind.Pointer:
+                case CppTypeKind.Reference:
+                case CppTypeKind.Qualified:
+                    return (input as CppTypeWithElementType).ElementType.ConvertToTealType(specialization);
+                case CppTypeKind.Array:
+                    break;
+                case CppTypeKind.Function:
+                    break;
+                case CppTypeKind.Typedef:
+                    var typedef = input as CppTypedef;
+                    if (typedef.ElementType.TypeKind == CppTypeKind.Primitive)
+                    {
+                        return typedef.ElementType.ConvertToTealType(specialization);
+                    }
+                    else if (TypeMappings.ContainsKey(typedef.Name))
+                    {
+                        return TypeMappings[typedef.Name];
+                    }
+                    else if (typedef.ElementType.TypeKind == CppTypeKind.StructOrClass && (typedef.ElementType as CppClass).TemplateParameters.Count > 0)
+                    {
+                        var templatedClass = typedef.ElementType as CppClass;
+                        if (templatedClass.Name == "vector")
+                        {
+                            return $"{{{templatedClass.TemplateParameters[0].ConvertToTealType(specialization)}}}";
+                        }
+                        else if (templatedClass.Name == "shared_ptr")
+                        {
+                            return templatedClass.TemplateParameters[0].ConvertToTealType(specialization);
+                        }
+                    }
+                    return typedef.Name;
+                case CppTypeKind.StructOrClass:
+                    {
+                        string name = (input as CppClass).Name;
+                        if (TypeMappings.ContainsKey(name))
+                        {
+                            return TypeMappings[name];
+                        }
+                        else if (name == "Vec2" && ((input as CppClass).TemplateParameters[0] as CppPrimitiveType).Kind == CppPrimitiveKind.Int)
+                        {
+                            return "PixelVector";
+                        }
+                        else if (name == "Vec2" && ((input as CppClass).TemplateParameters[0] as CppPrimitiveType).Kind == CppPrimitiveKind.Float)
+                        {
+                            return "Vector";
+                        }
+                        else if (name == "Rectangle" && ((input as CppClass).TemplateParameters[0] as CppPrimitiveType).Kind == CppPrimitiveKind.Int)
+                        {
+                            return "PixelRect";
+                        }
+                        else if (name == "Rectangle" && ((input as CppClass).TemplateParameters[0] as CppPrimitiveType).Kind == CppPrimitiveKind.Float)
+                        {
+                            return "Rect";
+                        }
+
+                        else if (name == "vector")
+                        {
+                            return $"{{{(input as CppClass).TemplateParameters[0].ConvertToTealType(specialization)}}}";
+                        }
+                        else if (name == "shared_ptr")
+                        {
+                            return (input as CppClass).TemplateParameters[0].ConvertToTealType(specialization);
+                        }
+                        else
+                        {
+                            return name;
+                        }
+                    }
+                case CppTypeKind.Enum:
+                    return (input as CppEnum).Name;
+                case CppTypeKind.TemplateParameterType:
+                    return (input as CppTemplateParameterType).Name;
+                case CppTypeKind.Unexposed:
+                    {
+                        string name = (input as CppUnexposedType).Name;
+                        if (name.StartsWith("const "))
+                        {
+                            name = name.Substring("const ".Length);
+                        }
+                        else if (name.StartsWith("optional"))
+                        {
+                            name = ((input as CppUnexposedType).TemplateParameters[0] as CppUnexposedType).Name;
+                        }
+
+                        if (TypeMappings.ContainsKey(name))
+                        {
+                            return TypeMappings[name];
+                        }
+                        else if (specialization != null && specialization.ElementType.TypeKind == CppTypeKind.StructOrClass)
+                        {
+                            var specializationClass = (specialization.ElementType as CppClass);
+                            Dictionary<string, string> templateParameters = specializationClass.SpecializedTemplate.TemplateParameters
+                                .Select(parameter => parameter.ConvertToTealType(specialization))
+                                .Zip(specializationClass.TemplateParameters.Select(parameter => parameter.ConvertToTealType(specialization)))
+                                .ToDictionary(x => x.First, x => x.Second);
+
+                            if (name.StartsWith(specializationClass.Name))
+                            {
+                                return specialization.Name;
+                            }
+                            else if (specializationClass.Name == "Rectangle" && name.Contains("Vec2"))
+                            {
+                                return specialization.Name.Replace("Rect", "Vector");
+                            }
+                            return templateParameters[name];
+                        }
+                        else
+                        {
+                            return name;
+                        }
+                    }
+                default:
+                    return String.Empty;
+            }
+            return String.Empty;
+        }
+
         public static string ConvertToMetaEnum(string value)
         {
             switch (value) {
                 case "index":
                 return "meta_function::index";
-                break;
                 default:
-                    return "";
-                break;
+                    return String.Empty;
             }
         }
 
