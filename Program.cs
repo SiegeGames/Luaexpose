@@ -44,7 +44,7 @@ namespace LuaExpose
             [Option('l', "lib", Required = true, HelpText = "Siege Source Dir")]
             public string libs { get; set; }
 
-            [Option('t', "temp", Required = true, HelpText = "Siege Source Dir")]
+            [Option('t', "temp", Required = true, HelpText = "Lua Output Template")]
             public string Scrib { get; set; }
 
             [Option('g', "game", Required = false, HelpText = "Siege Source Dir")]
@@ -52,6 +52,11 @@ namespace LuaExpose
 
             [Option('c', "cpp", Required = false, HelpText = "Siege Source Dir")]
             public string CppVersion { get; set; }
+
+            [Option('O', "tealoutput", Required = true, HelpText = "Teal Declaration Output")]
+            public string Declarations { get; set; }
+            [Option('T', "tealtemp", Required = true, HelpText = "Teal Output Template")]
+            public string TealScrib { get; set; }
         }
 
         static void Main(string[] args)
@@ -166,6 +171,7 @@ namespace LuaExpose
 
             Console.WriteLine($"Using libClang to parse {actualFiles.Count()} Files");
 
+            p.ParseMacros = true;
             var compilation = CppParser.ParseFiles(actualFiles.ToList(), p);
 
             if (compilation.DumpErrorsIfAny())
@@ -173,17 +179,35 @@ namespace LuaExpose
                 return;
             }
 
-            Console.WriteLine("Running LuaCodeGenWriter");
-            var lua = new LuaCodeGenWriter(compilation, opts.Scrib);
-            lua.Run(opts.Output, opts.IsGame);
+            void WriteWatch(Stopwatch watch, string prefix)
+            {
+                watch.Stop();
+                TimeSpan ts = watch.Elapsed;
+                string elapsedTime = String.Format("{0:00}:{1:00}:{2:00}.{3:00}",
+                    ts.Hours, ts.Minutes, ts.Seconds,
+                    ts.Milliseconds / 10);
+                Console.WriteLine(prefix + elapsedTime);
+            }
 
-            stopWatch.Stop();
-            TimeSpan ts = stopWatch.Elapsed;
-            string elapsedTime = String.Format("{0:00}:{1:00}:{2:00}.{3:00}",
-                ts.Hours, ts.Minutes, ts.Seconds,
-                ts.Milliseconds / 10);
-            Console.WriteLine("RunTime " + elapsedTime);
+            {
+                Stopwatch localWatch = new Stopwatch();
+                localWatch.Start();
+                Console.WriteLine("Running LuaCodeGenWriter");
+                var lua = new LuaCodeGenWriter(compilation, opts.Scrib);
+                lua.Run(opts.Output, opts.IsGame);
+                WriteWatch(localWatch, "LuaCodeGenWriter Runtime: ");
+            }
 
+            {
+                Stopwatch localWatch = new Stopwatch();
+                localWatch.Start();
+                Console.WriteLine("Running TealCodeGenWriter");
+                var lua = new TealCodeGenWriter(compilation, opts.TealScrib);
+                lua.Run(opts.Declarations, opts.IsGame);
+                WriteWatch(localWatch, "TealCodeGenWriter Runtime: ");
+            }
+
+            WriteWatch(stopWatch, "Total Runtime: ");
 
             currentTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
             File.WriteAllText(last_run, currentTime.ToString());
