@@ -182,7 +182,9 @@ namespace LuaExpose
                     break;
                 case CppTypeKind.Typedef:
                     var typedef = input as CppTypedef;
-                    if (typedef.ElementType.TypeKind == CppTypeKind.Primitive)
+
+                    if (typedef.ElementType.TypeKind == CppTypeKind.Primitive 
+                        || typedef.ElementType.TypeKind == CppTypeKind.Typedef)
                     {
                         return typedef.ElementType.ConvertToTealType(specialization);
                     }
