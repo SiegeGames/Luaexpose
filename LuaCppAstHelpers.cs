@@ -17,9 +17,20 @@ namespace LuaExpose
         {
             return input.Attributes.Any(x => x.Name == "LUA_CTOR");
         }
+        public static string GetName(this CppFunction input)
+        {
+            if (input.IsNormalFunc() && input.Attributes[0].Arguments != null)
+            {
+                if (!input.Attributes[0].Arguments.Contains("use_static"))
+                {
+                    return input.Attributes[0].Arguments;
+                }
+            }
+            return input.Name;
+        }
         public static bool IsNormalFunc(this CppFunction input)
         {
-            return input.Attributes.Any(x => x.Name == "LUA_FUNC");
+            return input.Attributes.Count > 0 && input.Attributes[0].Name == "LUA_FUNC";
         }
         public static bool IsNormalStaticFunc(this CppFunction input)
         {

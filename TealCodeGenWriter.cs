@@ -81,7 +81,7 @@ namespace LuaExpose
                     .Where(func => func.IsNormalFunc() || func.IsOverloadFunc())
                     .Select(func => new TealFunction
                     {
-                        Name = func.Name,
+                        Name = func.GetName(),
                         ReturnType = func.ReturnType.ConvertToTealType(Specialization),
                         Parameters = func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType(Specialization) }).ToList()
                     }));
@@ -101,7 +101,7 @@ namespace LuaExpose
                 .Where(func => func.IsNormalFunc() || func.IsOverloadFunc())
                 .Select(func => new TealFunction
                 {
-                    Name = func.Name,
+                    Name = func.GetName(),
                     ReturnType = func.ReturnType.ConvertToTealType(),
                     Parameters = func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType() }).ToList()
                 }));
