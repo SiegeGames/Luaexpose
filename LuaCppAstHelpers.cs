@@ -21,9 +21,12 @@ namespace LuaExpose
         {
             if (input.IsNormalFunc() && input.Attributes[0].Arguments != null)
             {
-                if (!input.Attributes[0].Arguments.Contains("use_static"))
+                foreach(string arg in input.Attributes[0].Arguments.Split(","))
                 {
-                    return input.Attributes[0].Arguments;
+                    if (arg != "use_static")
+                    {
+                        return arg.Trim();
+                    }
                 }
             }
             return input.Name;
