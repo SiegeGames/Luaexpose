@@ -22,6 +22,30 @@ namespace LuaExpose
             public string Name;
             public string ReturnType;
             public List<TealVariable> Parameters = new List<TealVariable>();
+            public TealFunction(string Name, string ReturnType)
+            {
+                this.Name = Name;
+                this.ReturnType = ReturnType;
+            }
+            public TealFunction(string Name, string ReturnType, List<TealVariable> Parameters)
+            {
+                this.Name = Name;
+                this.ReturnType = ReturnType;
+                this.Parameters = Parameters;
+            }
+            public TealFunction(CppFunction func, string className, CppTypedef specialization)
+            {
+                Name = func.GetName();
+                ReturnType = func.ReturnType.ConvertToTealType(specialization);
+                if (func.StorageQualifier == CppStorageQualifier.None)
+                {
+                    Parameters.Add(new TealVariable { Name = "self", Type = className });
+                }
+                Parameters.AddRange(func.Parameters.Select(param => new TealVariable {
+                    Name = param.GetTealName(),
+                    Type = param.Type.ConvertToTealType(specialization)
+                }).ToList());
+            }
         }
 
         public class TealEnum
@@ -66,11 +90,15 @@ namespace LuaExpose
                     Constructors.AddRange(cppClass.Constructors
                         .Where(func => func.IsConstructor())
                         .Select(func => new TealFunction
-                        {
-                            Name = "new",
-                            ReturnType = Name,
-                            Parameters = func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType(Specialization) }).ToList()
-                        }));
+                        (
+                            "new",
+                            Name,
+                            func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType(Specialization) }).ToList()
+                        )));
+                    if (Constructors.Count == 0)
+                    {
+                        Constructors.Add(new TealFunction("new", Name));
+                    }
                 }
 
                 Fields.AddRange(cppClass.Fields
@@ -79,12 +107,7 @@ namespace LuaExpose
 
                 Functions.AddRange(cppClass.Functions
                     .Where(func => func.IsNormalFunc() || func.IsOverloadFunc())
-                    .Select(func => new TealFunction
-                    {
-                        Name = func.GetName(),
-                        ReturnType = func.ReturnType.ConvertToTealType(Specialization),
-                        Parameters = func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType(Specialization) }).ToList()
-                    }));
+                    .Select(func => new TealFunction(func, Name, Specialization)));
             }
         }
 
@@ -100,11 +123,11 @@ namespace LuaExpose
                 Functions.AddRange((userType.OriginalElement as CppNamespace).Functions
                 .Where(func => func.IsNormalFunc() || func.IsOverloadFunc())
                 .Select(func => new TealFunction
-                {
-                    Name = func.GetName(),
-                    ReturnType = func.ReturnType.ConvertToTealType(),
-                    Parameters = func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType() }).ToList()
-                }));
+                (
+                    func.GetName(),
+                    func.ReturnType.ConvertToTealType(),
+                    func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType() }).ToList()
+                )));
             }
         }
 
