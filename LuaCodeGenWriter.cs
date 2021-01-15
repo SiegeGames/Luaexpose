@@ -96,7 +96,7 @@ namespace LuaExpose
                 else // namespaces functions
                 {
                     // check and see if this should be a static function? 
-                    if (cpp.Attributes[0].Arguments == "use_static") {
+                    if (cpp.IsNormalStaticFunc()) {
                         // in this case we have to do something like an overload. 
                         var paramList = string.Join(',', cpp.Parameters.Select(x => x.Type.ConvertToSiegeType()));
                         bool constReturn = false;
@@ -423,7 +423,7 @@ namespace LuaExpose
                             
                             var paramList = string.Join(',', yy[a].Parameters.Select(x => x.Type.ConvertToSiegeType()));
 
-                            funcStringBuilder.Append($"{paramList}) {(methodConst ? "const" : "")} >(&{fullyQualifiedFunctionName}{yy[a].GetName()})");
+                            funcStringBuilder.Append($"{paramList}) {(methodConst ? "const" : "")} >(&{fullyQualifiedFunctionName}{yy[a].Name})");
 
                             if (a != yy.Count() - 1)
                             {
@@ -450,7 +450,7 @@ namespace LuaExpose
                             var methodConst = ff.Flags.HasFlag(CppFunctionFlags.Const);
 
                             funcStringBuilder.Append($"\"{ff.GetName()}\", static_cast<{ff.ReturnType.GetDisplayName()} ({fullyQualifiedFunctionName}*)({paramList})");
-                            funcStringBuilder.Append($" {(methodConst ? "const" : "")} > (&{ fullyQualifiedFunctionName}{ ff.GetName()})");
+                            funcStringBuilder.Append($" {(methodConst ? "const" : "")} > (&{ fullyQualifiedFunctionName}{ ff.Name})");
 
 
                             funcStringBuilder.Append("\n            ");
@@ -486,7 +486,7 @@ namespace LuaExpose
 
                         extraIncludes.Add(AddTypeHeader(thingsWeCareAbout[w]));
 
-                        funcStringBuilder.Append($"\"{item.GetName()}{thingsWeCareAbout[w].Name.Replace(baseType, "") }\", &{fullyQualifiedFunctionName}{item.GetName()}<{thingsWeCareAbout[w].Name}>");
+                        funcStringBuilder.Append($"\"{item.GetName()}{thingsWeCareAbout[w].Name.Replace(baseType, "") }\", &{fullyQualifiedFunctionName}{item.Name}<{thingsWeCareAbout[w].Name}>");
                         funcStringBuilder.Append("\n            ");
 
                         functionStrings.Add(funcStringBuilder.ToString());
