@@ -96,7 +96,7 @@ namespace LuaExpose
                 else // namespaces functions
                 {
                     // check and see if this should be a static function? 
-                    if (cpp.IsNormalStaticFunc()) {
+                    if (cpp.Attributes[0].Arguments == "use_static") {
                         // in this case we have to do something like an overload. 
                         var paramList = string.Join(',', cpp.Parameters.Select(x => x.Type.ConvertToSiegeType()));
                         bool constReturn = false;
