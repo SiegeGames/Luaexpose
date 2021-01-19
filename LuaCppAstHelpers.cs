@@ -119,6 +119,10 @@ namespace LuaExpose
             if (x.Contains("variadic_args")) {
                 return x.Replace("variadic_args", "sol::variadic_args");
             }
+            if (x.Contains("basic_table_core"))
+            {
+                return x.Replace("basic_table_core", "sol::table");
+            }
             if (x.Contains("basic_string")) {
                 return x.Replace("basic_string", "String");
             }
@@ -144,6 +148,8 @@ namespace LuaExpose
             { "String", "string" },
             { "Unicode", "string" },
             { "Path", "string" },
+            { "HashedString", "HashedString | string" },
+            { "HashedString64", "HashedString64 | string" },
             { "EntityID", "number" },
             { "ComponentID", "number" },
             { "PrefabID", "number" },
@@ -257,7 +263,7 @@ namespace LuaExpose
                         }
                     }
                 case CppTypeKind.Enum:
-                    return (input as CppEnum).Name;
+                    return (input as CppEnum).Name + " | number";
                 case CppTypeKind.TemplateParameterType:
                     return (input as CppTemplateParameterType).Name;
                 case CppTypeKind.Unexposed:

@@ -50,10 +50,10 @@ namespace LuaExpose
             var overloadFunctions = parentContainer.Functions.Where(x => x.GetName() == cpp.GetName() && (x.IsOverloadFunc()));
 
             StringBuilder currentOutput = new StringBuilder();
-            var fullyQualifiedFunctionName = $"{lu.TypeNameLower}::{cpp.GetName()}";
+            var fullyQualifiedFunctionName = $"{lu.TypeNameLower}::{cpp.Name}";
             if (lu.TypeNameLower == "siege")
             {
-                fullyQualifiedFunctionName = $"{cpp.GetName()}";
+                fullyQualifiedFunctionName = $"{cpp.Name}";
             }
 
             //var forwardFunctions = parentContainer.Functions.Where(x => x.Name == cpp.Name && x.IsFowardFunc());
@@ -392,20 +392,20 @@ namespace LuaExpose
 
                 var overloadFunctions = functionList.Where(xsd => xsd.IsOverloadFunc());
 
-                var functionsWithSameName = functionList.GroupBy(x => x.GetName()).Where(group => group.Count() > 1).SelectMany(z => z).ToList();
+                var functionsWithSameName = functionList.GroupBy(x => x.Name).Where(group => group.Count() > 1).SelectMany(z => z).ToList();
                 functionsWithSameName.AddRange(overloadFunctions);
 
-                var foundStaticFuncs = functionList.Where(xsd => xsd.IsNormalStaticFunc()).Select(x => x.GetName()).ToList();
+                var foundStaticFuncs = functionList.Where(xsd => xsd.IsNormalStaticFunc()).Select(x => x.Name).ToList();
 
                 for (int w = 0; w < functionList.Count(); w++)
                 {
                     var funcStringBuilder = new StringBuilder();
                     var ff = functionList[w];
-                    var shouldAttemptStatic = ff.IsNormalStaticFunc() || foundStaticFuncs.Contains(ff.GetName());
+                    var shouldAttemptStatic = ff.IsNormalStaticFunc() || foundStaticFuncs.Contains(ff.Name);
 
-                    if (functionsWithSameName.Any(x => x.GetName() == ff.GetName()) && !shouldAttemptStatic)
+                    if (functionsWithSameName.Any(x => x.Name == ff.Name) && !shouldAttemptStatic)
                     {
-                        var yy = functionsWithSameName.Where(z => z.GetName() == ff.GetName()).ToList();
+                        var yy = functionsWithSameName.Where(z => z.Name == ff.Name).ToList();
                         funcStringBuilder.Append($"\"{ff.GetName()}\", sol::overload(\n            ");
                         for (int a = 0; a < yy.Count(); a++)
                         {
@@ -456,7 +456,7 @@ namespace LuaExpose
                             funcStringBuilder.Append("\n            ");
                         }
                         else {
-                            funcStringBuilder.Append($"\"{ff.GetName()}\", &{fullyQualifiedFunctionName}{ff.GetName()}");
+                            funcStringBuilder.Append($"\"{ff.GetName()}\", &{fullyQualifiedFunctionName}{ff.Name}");
                             funcStringBuilder.Append("\n            ");
                         }
                     }
@@ -524,7 +524,7 @@ namespace LuaExpose
                 if (metaFunctions.Count() != 0) {
                     foreach (var m in metaFunctions) {
                         var funcStringBuilder = new StringBuilder();
-                        funcStringBuilder.Append($"sol::{CppExtenstions.ConvertToMetaEnum(m.Attributes[0].Arguments)}, &{fullyQualifiedFunctionName}{m.GetName()}");
+                        funcStringBuilder.Append($"sol::{CppExtenstions.ConvertToMetaEnum(m.Attributes[0].Arguments)}, &{fullyQualifiedFunctionName}{m.Name}");
                         funcStringBuilder.Append("\n            ");
 
                         functionStrings.Add(funcStringBuilder.ToString());
