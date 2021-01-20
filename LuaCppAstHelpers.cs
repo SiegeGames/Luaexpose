@@ -23,7 +23,7 @@ namespace LuaExpose
             {
                 foreach(string arg in input.Attributes[0].Arguments.Split(","))
                 {
-                    if (arg != "use_static")
+                    if (arg != "use_static" && !arg.Contains("="))
                     {
                         return arg.Trim();
                     }
@@ -126,6 +126,11 @@ namespace LuaExpose
             if (x.Contains("basic_string")) {
                 return x.Replace("basic_string", "String");
             }
+            if (x.Contains("shared_ptr") && input.TypeKind == CppTypeKind.StructOrClass)
+            {
+                CppClass inputClass = input as CppClass;
+                return $"std::shared_ptr<{inputClass.TemplateParameters[0].ConvertToSiegeType()}>";
+            }
 
             return input.GetDisplayName();
         }
@@ -158,6 +163,7 @@ namespace LuaExpose
             { "basic_string", "string" },
             { "basic_object", "any" },
             { "basic_function", "any" },
+            { "basic_protected_function", "any"},
             { "basic_table_core", "any" },
             { "state_view", "any" },
             { "variadic_args", "any" },

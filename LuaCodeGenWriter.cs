@@ -412,7 +412,7 @@ namespace LuaExpose
                             var methodConst = ff.Flags.HasFlag(CppFunctionFlags.Const);
 
                             var isClass = yy[a].ReturnType is CppClass;
-                            if (isClass)
+                            if (isClass && (yy[a].ReturnType as CppClass).Name != "shared_ptr")
                             {
                                 funcStringBuilder.Append($"   sol::resolve<sol::object(");
                             }

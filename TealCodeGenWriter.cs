@@ -22,6 +22,8 @@ namespace LuaExpose
             public string Name;
             public string ReturnType;
             public List<TealVariable> Parameters = new List<TealVariable>();
+            public List<string> Generics = new List<string>();
+            public bool HasGenerics { get { return Generics.Count > 0; } }
             public TealFunction(string Name, string ReturnType)
             {
                 this.Name = Name;
@@ -45,6 +47,34 @@ namespace LuaExpose
                     Name = param.GetTealName(),
                     Type = param.Type.ConvertToTealType(specialization)
                 }).ToList());
+
+                Dictionary<string, string> genericRemapping = new Dictionary<string, string>();
+                if ((func.IsNormalFunc() || func.IsOverloadFunc()) && func.Attributes[0].Arguments != null)
+                {
+                    foreach (string arg in func.Attributes[0].Arguments.Split(","))
+                    {
+                        string[] values = arg.Split("=");
+                        if (values.Length == 2)
+                        {
+                            genericRemapping[values[0]] = values[1];
+                        }
+                    }
+                }
+                if (genericRemapping.Count > 0)
+                {
+                    Generics = genericRemapping.Values.Distinct().ToList();
+                    foreach (TealVariable parameter in Parameters)
+                    {
+                        if (genericRemapping.ContainsKey(parameter.Name))
+                        {
+                            parameter.Type = genericRemapping[parameter.Name];
+                        }
+                    }
+                    if (genericRemapping.ContainsKey("return"))
+                    {
+                        ReturnType = genericRemapping["return"];
+                    }
+                }
             }
         }
 
