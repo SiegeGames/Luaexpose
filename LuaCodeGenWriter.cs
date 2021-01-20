@@ -694,12 +694,6 @@ namespace LuaExpose
                 }
             }
 
-            if (includes.Any(x => x.Contains("ui")))
-            {
-                includes.Add(@"#include ""ui/Forward.h""");
-                usings.Add("using namespace ui;");
-            }
-
             if (includes.Any(x => x.Contains("base/Event.h")))
             {
                 includes.Add(@"#include ""ui/View.h""");
