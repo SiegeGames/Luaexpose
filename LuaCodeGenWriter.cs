@@ -131,8 +131,6 @@ namespace LuaExpose
 
                 currentOutput.Append(", sol::overload(\n            ");
 
-                Queue<CppFunction> deleteList = new Queue<CppFunction>();
-
                 // We have more than one function with the same name but different params
                 // so we need to mark these with the overloaded
                 for (int i = 0; i < functionsWithSameName.Count(); i++)
@@ -146,15 +144,8 @@ namespace LuaExpose
                         currentOutput.Append(",\n            ");
                     else
                         currentOutput.Append("\n        ");
-
-                    deleteList.Enqueue(of);
                 }
                 currentOutput.Append($"));\n        ");
-
-                while (deleteList.Any())
-                {
-                    parentContainer.Functions.Remove(deleteList.Dequeue());
-                }
             }
 
             return currentOutput.ToString();
@@ -674,9 +665,15 @@ namespace LuaExpose
                         namespaces.AddLast(GenerateNamespaceSetup(lu));
                     }
 
+                    // List of functions that have been exposed so we don't expose overloaded functions multiple times
+                    List<string> exposedFunctionsNames = new List<string>();
                     foreach (var f in lu.NormalFunctions)
                     {
-                        namespaces.AddLast(GenerateNamespaceFunction(lu, f));
+                        if (!exposedFunctionsNames.Contains(f.GetName()))
+                        {
+                            namespaces.AddLast(GenerateNamespaceFunction(lu, f));
+                            exposedFunctionsNames.Add(f.GetName());
+                        }
                     }
                 }
 
