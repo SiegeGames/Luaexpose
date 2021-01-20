@@ -145,7 +145,8 @@ namespace LuaExpose
         {
             public string Name;
             public List<TealFunction> Functions = new List<TealFunction>();
-
+            public List<TealVariable> Fields = new List<TealVariable>();
+            public TealNamespace() { }
             public TealNamespace(LuaUserType userType)
             {
                 Name = userType.TypeNameLower;
@@ -171,6 +172,7 @@ namespace LuaExpose
             LinkedList<TealClass> classes = new LinkedList<TealClass>();
             LinkedList<TealEnum> enums = new LinkedList<TealEnum>();
             LinkedList<TealNamespace> namespaces = new LinkedList<TealNamespace>();
+            TealNamespace globalNamespace = new TealNamespace();
 
             bool FindSpecializationInNamespace(CppClass cppClass, CppNamespace cppNamespace, string specialization)
             {
@@ -214,7 +216,15 @@ namespace LuaExpose
                 }
                 else if (lu.IsNamespace)
                 {
-                    namespaces.AddLast(new TealNamespace(lu));
+                    TealNamespace tealNamespace = new TealNamespace(lu);
+                    if (tealNamespace.Name == "siege")
+                    {
+                        globalNamespace = tealNamespace;
+                    }
+                    else
+                    {
+                        namespaces.AddLast(tealNamespace);
+                    }
                 }
                 foreach (var parsedEnum in lu.Enums)
                 {
@@ -223,7 +233,7 @@ namespace LuaExpose
             }
 
             var scribe = Template.Parse(File.ReadAllText(template));
-            return scribe.Render(new { Classes = classes, Enums = enums, Namespaces = namespaces });
+            return scribe.Render(new { Classes = classes, Enums = enums, Namespaces = namespaces, Globals = globalNamespace });
         }
 
         protected override string GetUsertypeFileName(string usertypeFile)
