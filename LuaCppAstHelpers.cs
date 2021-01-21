@@ -123,6 +123,10 @@ namespace LuaExpose
             {
                 return x.Replace("basic_table_core", "sol::table");
             }
+            if (x.Contains("basic_object"))
+            {
+                return x.Replace("basic_object", "sol::object");
+            }
             if (x.Contains("basic_string")) {
                 return x.Replace("basic_string", "String");
             }
