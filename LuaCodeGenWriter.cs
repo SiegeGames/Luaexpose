@@ -44,7 +44,7 @@ namespace LuaExpose
 
             // these are functions with the same name that need to be overloaded, and then we will remove
             // them from the parent list so we don't iterate over them anymore in the future
-            var functionsWithSameName = parentContainer.Functions.Where(x => x.GetName() == cpp.GetName() && (x.IsNormalFunc() || x.IsOverloadFunc()));
+            var functionsWithSameName = parentContainer.Functions.Where(x => x.GetName() == cpp.GetName() && x.IsExposedFunc());
 
 
             var overloadFunctions = parentContainer.Functions.Where(x => x.GetName() == cpp.GetName() && (x.IsOverloadFunc()));
@@ -361,7 +361,7 @@ namespace LuaExpose
                     foreach (var bc in inClass.BaseTypes)
                     {
                         var c = bc.Type as CppClass;
-                        funcs.AddRange(c.Functions.Where(z => (z.IsNormalFunc() || z.IsOverloadFunc()) && z.Flags.HasFlag(CppFunctionFlags.Virtual)));
+                        funcs.AddRange(c.Functions.Where(z => (z.IsExposedFunc()) && z.Flags.HasFlag(CppFunctionFlags.Virtual)));
 
                         WalkFunctionTree(c, funcs);
                     }
@@ -369,7 +369,7 @@ namespace LuaExpose
 
                 // This will be a merged list of functions from the base and the current class
                 List<CppFunction> functionList = new List<CppFunction>();
-                functionList.AddRange(cpp.Functions.Where(z => z.IsNormalFunc() || z.IsOverloadFunc()));
+                functionList.AddRange(cpp.Functions.Where(z => z.IsExposedFunc()));
 
                 if (shouldAddBaseData)
                 {

@@ -23,9 +23,13 @@ namespace LuaExpose
             {
                 foreach(string arg in input.Attributes[0].Arguments.Split(","))
                 {
-                    if (arg != "use_static" && !arg.Contains("="))
+                    if (arg.Contains("="))
                     {
-                        return arg.Trim();
+                        string[] argPair = arg.Split("=");
+                        if (argPair.Length == 2 && argPair[0] == "$name")
+                        {
+                            return argPair[1].Trim();
+                        }
                     }
                 }
             }
@@ -37,8 +41,15 @@ namespace LuaExpose
         }
         public static bool IsNormalStaticFunc(this CppFunction input)
         {
-            if (input.IsNormalFunc() && input.Attributes[0].Arguments != null)
+            if (input.IsExposedFunc() && input.Attributes[0].Arguments != null)
                 return input.Attributes[0].Arguments.Contains("use_static");
+
+            return false;
+        }
+        public static bool IsNormalGenericFunc(this CppFunction input)
+        {
+            if (input.IsExposedFunc() && input.Attributes[0].Arguments != null)
+                return input.Attributes[0].Arguments.Contains("use_generic");
 
             return false;
         }
@@ -53,6 +64,10 @@ namespace LuaExpose
         public static bool IsOverloadFunc(this CppFunction input)
         {
             return input.Attributes.Any(x => x.Name == "LUA_FUNC_OVERLOAD");
+        }
+        public static bool IsExposedFunc(this CppFunction input)
+        {
+            return input.IsNormalFunc() || input.IsOverloadFunc();
         }
         public static bool IsTemplateFunc(this CppFunction input)
         {
@@ -72,7 +87,7 @@ namespace LuaExpose
         }
         public static List<CppFunction> GetNormalFunctions(this LuaUserType input)
         {
-            return (input.OriginalElement as ICppDeclarationContainer).Functions.Where(x => x.IsNormalFunc() || x.IsOverloadFunc()).ToList();
+            return (input.OriginalElement as ICppDeclarationContainer).Functions.Where(x => x.IsExposedFunc()).ToList();
         }
         public static List<CppFunction> GetMetaFunctions(this LuaUserType input)
         {
@@ -83,7 +98,7 @@ namespace LuaExpose
             if (input.OriginalElement is CppEnum)
                 return new List<CppEnum> { input.OriginalElement as CppEnum };
 
-            return (input.OriginalElement as ICppDeclarationContainer).Enums.Where(x => x.IsEnum()).ToList();
+            return (input.OriginalElement as ICppDeclarationContainer).Enums.Where(x => x.IsEnum() && x.SourceFile == input.OriginLocation).ToList();
         }
         public static List<CppClass> GetClasses(this LuaUserType input)
         {
@@ -144,7 +159,7 @@ namespace LuaExpose
             if ((input.Name == "" && input.Type.TypeKind == CppTypeKind.Unexposed && (input.Type as CppUnexposedType).Name == "T...") ||
                 (input.Name == "args" && input.Type.TypeKind == CppTypeKind.StructOrClass && (input.Type as CppClass).Name == "variadic_args"))
             {
-                return "...";
+                return "...args";
             }
             else
             {
@@ -227,7 +242,7 @@ namespace LuaExpose
                         var templatedClass = typedef.ElementType as CppClass;
                         if (templatedClass.Name == "vector")
                         {
-                            return $"{{{templatedClass.TemplateParameters[0].ConvertToTealType(specialization)}}}";
+                            return $"Array<{templatedClass.TemplateParameters[0].ConvertToTealType(specialization)}>";
                         }
                         else if (templatedClass.Name == "shared_ptr")
                         {
@@ -261,7 +276,7 @@ namespace LuaExpose
 
                         else if (name == "vector")
                         {
-                            return $"{{{(input as CppClass).TemplateParameters[0].ConvertToTealType(specialization)}}}";
+                            return $"Array<{(input as CppClass).TemplateParameters[0].ConvertToTealType(specialization)}>";
                         }
                         else if (name == "shared_ptr")
                         {
