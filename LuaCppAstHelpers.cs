@@ -172,8 +172,6 @@ namespace LuaExpose
             { "String", "string" },
             { "Unicode", "string" },
             { "Path", "string" },
-            { "HashedString", "HashedString | string" },
-            { "HashedString64", "HashedString64 | string" },
             { "EntityID", "number" },
             { "ComponentID", "number" },
             { "PrefabID", "number" },
