@@ -172,10 +172,6 @@ namespace LuaExpose
             { "String", "string" },
             { "Unicode", "string" },
             { "Path", "string" },
-            { "EntityID", "number" },
-            { "ComponentID", "number" },
-            { "PrefabID", "number" },
-            { "TileID", "number" },
             { "CallbackHandle", "number" },
             { "basic_string", "string" },
             { "basic_object", "any" },
@@ -185,6 +181,14 @@ namespace LuaExpose
             { "state_view", "any" },
             { "variadic_args", "any" },
             { "T...", "any" },
+        };
+
+        private static readonly List<string> PreservedTypedefs = new List<string>
+        {
+            "EntityID",
+            "ComponentID",
+            "PrefabID",
+            "TileID",
         };
 
         public static string ConvertToTealType(this CppType input, CppTypedef specialization = null)
@@ -226,7 +230,11 @@ namespace LuaExpose
                 case CppTypeKind.Typedef:
                     var typedef = input as CppTypedef;
 
-                    if (typedef.ElementType.TypeKind == CppTypeKind.Primitive 
+                    if (PreservedTypedefs.Contains(typedef.Name))
+                    {
+                        return typedef.Name;
+                    }
+                    else if (typedef.ElementType.TypeKind == CppTypeKind.Primitive 
                         || typedef.ElementType.TypeKind == CppTypeKind.Typedef)
                     {
                         return typedef.ElementType.ConvertToTealType(specialization);
