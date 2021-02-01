@@ -44,10 +44,10 @@ namespace LuaExpose
 
             // these are functions with the same name that need to be overloaded, and then we will remove
             // them from the parent list so we don't iterate over them anymore in the future
-            var functionsWithSameName = parentContainer.Functions.Where(x => x.Name == cpp.Name && (x.IsNormalFunc() || x.IsOverloadFunc()));
+            var functionsWithSameName = parentContainer.Functions.Where(x => x.GetName() == cpp.GetName() && x.IsExposedFunc());
 
 
-            var overloadFunctions = parentContainer.Functions.Where(x => x.Name == cpp.Name && (x.IsOverloadFunc()));
+            var overloadFunctions = parentContainer.Functions.Where(x => x.GetName() == cpp.GetName() && (x.IsOverloadFunc()));
 
             StringBuilder currentOutput = new StringBuilder();
             var fullyQualifiedFunctionName = $"{lu.TypeNameLower}::{cpp.Name}";
@@ -78,7 +78,7 @@ namespace LuaExpose
             //            returnString = zz[1];
             //    }
 
-            //    funcStringBuilder.Append($"{lu.TypeNameLower}.set_function(\"{cpp.Name}\", []({lu.TypeNameLower}& o{argBuilder}){{ o.{m.Name}({callBuilder})}}");
+            //    funcStringBuilder.Append($"{lu.TypeNameLower}.set_function(\"{cpp.GetName()}\", []({lu.TypeNameLower}& o{argBuilder}){{ o.{m.GetName()}({callBuilder})}}");
             //    funcStringBuilder.Append("\n            ");
 
             //    currentOutput.Append(funcStringBuilder.ToString());
@@ -91,7 +91,7 @@ namespace LuaExpose
                 // these are global functions and just get thrown into the state
                 if (lu.TypeNameLower == "siege")
                 {
-                    currentOutput.Append($"state.set_function(\"{cpp.Name}\",&{fullyQualifiedFunctionName});\n        ");
+                    currentOutput.Append($"state.set_function(\"{cpp.GetName()}\",&{fullyQualifiedFunctionName});\n        ");
                 }
                 else // namespaces functions
                 {
@@ -108,11 +108,11 @@ namespace LuaExpose
 
                         var methodConst = cpp.Flags.HasFlag(CppFunctionFlags.Const);
 
-                        currentOutput.Append($"{lu.TypeNameLower}.set_function(\"{cpp.Name}\", static_cast<{cpp.ReturnType.GetDisplayName()} (*)({paramList})");
+                        currentOutput.Append($"{lu.TypeNameLower}.set_function(\"{cpp.GetName()}\", static_cast<{cpp.ReturnType.GetDisplayName()} (*)({paramList})");
                         currentOutput.Append($" {(methodConst ? "const" : "")} > (&{fullyQualifiedFunctionName}));\n        ");
                     }
                     else {
-                        currentOutput.Append($"{lu.TypeNameLower}.set_function(\"{cpp.Name}\", &{fullyQualifiedFunctionName});\n        ");
+                        currentOutput.Append($"{lu.TypeNameLower}.set_function(\"{cpp.GetName()}\", &{fullyQualifiedFunctionName});\n        ");
                     }
 
                 }
@@ -126,12 +126,10 @@ namespace LuaExpose
                 }
                 else
                 {
-                    currentOutput.Append($"{lu.TypeNameLower}.set_function(\"{cpp.Name}\", &{fullyQualifiedFunctionName}");
+                    currentOutput.Append($"{lu.TypeNameLower}.set_function(\"{cpp.GetName()}\", &{fullyQualifiedFunctionName}");
                 }
 
                 currentOutput.Append(", sol::overload(\n            ");
-
-                Queue<CppFunction> deleteList = new Queue<CppFunction>();
 
                 // We have more than one function with the same name but different params
                 // so we need to mark these with the overloaded
@@ -146,15 +144,8 @@ namespace LuaExpose
                         currentOutput.Append(",\n            ");
                     else
                         currentOutput.Append("\n        ");
-
-                    deleteList.Enqueue(of);
                 }
                 currentOutput.Append($"));\n        ");
-
-                while (deleteList.Any())
-                {
-                    parentContainer.Functions.Remove(deleteList.Dequeue());
-                }
             }
 
             return currentOutput.ToString();
@@ -370,7 +361,7 @@ namespace LuaExpose
                     foreach (var bc in inClass.BaseTypes)
                     {
                         var c = bc.Type as CppClass;
-                        funcs.AddRange(c.Functions.Where(z => (z.IsNormalFunc() || z.IsOverloadFunc()) && z.Flags.HasFlag(CppFunctionFlags.Virtual)));
+                        funcs.AddRange(c.Functions.Where(z => (z.IsExposedFunc()) && z.Flags.HasFlag(CppFunctionFlags.Virtual)));
 
                         WalkFunctionTree(c, funcs);
                     }
@@ -378,7 +369,7 @@ namespace LuaExpose
 
                 // This will be a merged list of functions from the base and the current class
                 List<CppFunction> functionList = new List<CppFunction>();
-                functionList.AddRange(cpp.Functions.Where(z => z.IsNormalFunc() || z.IsOverloadFunc()));
+                functionList.AddRange(cpp.Functions.Where(z => z.IsExposedFunc()));
 
                 if (shouldAddBaseData)
                 {
@@ -406,13 +397,13 @@ namespace LuaExpose
                     if (functionsWithSameName.Any(x => x.Name == ff.Name) && !shouldAttemptStatic)
                     {
                         var yy = functionsWithSameName.Where(z => z.Name == ff.Name).ToList();
-                        funcStringBuilder.Append($"\"{ff.Name}\", sol::overload(\n            ");
+                        funcStringBuilder.Append($"\"{ff.GetName()}\", sol::overload(\n            ");
                         for (int a = 0; a < yy.Count(); a++)
                         {
                             var methodConst = ff.Flags.HasFlag(CppFunctionFlags.Const);
 
                             var isClass = yy[a].ReturnType is CppClass;
-                            if (isClass)
+                            if (isClass && (yy[a].ReturnType as CppClass).Name != "shared_ptr")
                             {
                                 funcStringBuilder.Append($"   sol::resolve<sol::object(");
                             }
@@ -449,14 +440,14 @@ namespace LuaExpose
 
                             var methodConst = ff.Flags.HasFlag(CppFunctionFlags.Const);
 
-                            funcStringBuilder.Append($"\"{ff.Name}\", static_cast<{ff.ReturnType.GetDisplayName()} ({fullyQualifiedFunctionName}*)({paramList})");
+                            funcStringBuilder.Append($"\"{ff.GetName()}\", static_cast<{ff.ReturnType.GetDisplayName()} ({fullyQualifiedFunctionName}*)({paramList})");
                             funcStringBuilder.Append($" {(methodConst ? "const" : "")} > (&{ fullyQualifiedFunctionName}{ ff.Name})");
 
 
                             funcStringBuilder.Append("\n            ");
                         }
                         else {
-                            funcStringBuilder.Append($"\"{ff.Name}\", &{fullyQualifiedFunctionName}{ff.Name}");
+                            funcStringBuilder.Append($"\"{ff.GetName()}\", &{fullyQualifiedFunctionName}{ff.Name}");
                             funcStringBuilder.Append("\n            ");
                         }
                     }
@@ -486,7 +477,7 @@ namespace LuaExpose
 
                         extraIncludes.Add(AddTypeHeader(thingsWeCareAbout[w]));
 
-                        funcStringBuilder.Append($"\"{item.Name}{thingsWeCareAbout[w].Name.Replace(baseType, "") }\", &{fullyQualifiedFunctionName}{item.Name}<{thingsWeCareAbout[w].Name}>");
+                        funcStringBuilder.Append($"\"{item.GetName()}{thingsWeCareAbout[w].Name.Replace(baseType, "") }\", &{fullyQualifiedFunctionName}{item.Name}<{thingsWeCareAbout[w].Name}>");
                         funcStringBuilder.Append("\n            ");
 
                         functionStrings.Add(funcStringBuilder.ToString());
@@ -537,7 +528,7 @@ namespace LuaExpose
                     // LUA_FORWARD_FUNC(arg=int, arg=int, return=void, caller={args})
                     var cc = m.Attributes[0].Arguments.Split(',');
                     var returnString = "void";
-                    var funcBindName = m.Name;
+                    var funcBindName = m.GetName();
                     var callerOverride = "";
                     var argBuilder = new StringBuilder();
                     var callBuilder = new StringBuilder();
@@ -674,9 +665,15 @@ namespace LuaExpose
                         namespaces.AddLast(GenerateNamespaceSetup(lu));
                     }
 
+                    // List of functions that have been exposed so we don't expose overloaded functions multiple times
+                    List<string> exposedFunctionsNames = new List<string>();
                     foreach (var f in lu.NormalFunctions)
                     {
-                        namespaces.AddLast(GenerateNamespaceFunction(lu, f));
+                        if (!exposedFunctionsNames.Contains(f.GetName()))
+                        {
+                            namespaces.AddLast(GenerateNamespaceFunction(lu, f));
+                            exposedFunctionsNames.Add(f.GetName());
+                        }
                     }
                 }
 
@@ -692,12 +689,6 @@ namespace LuaExpose
                 {
                     enums.AddLast(GenerateEnum(lu, e, ref includes));
                 }
-            }
-
-            if (includes.Any(x => x.Contains("ui")))
-            {
-                includes.Add(@"#include ""ui/Forward.h""");
-                usings.Add("using namespace ui;");
             }
 
             if (includes.Any(x => x.Contains("base/Event.h")))

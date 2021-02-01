@@ -17,14 +17,39 @@ namespace LuaExpose
         {
             return input.Attributes.Any(x => x.Name == "LUA_CTOR");
         }
+        public static string GetName(this CppFunction input)
+        {
+            if (input.IsNormalFunc() && input.Attributes[0].Arguments != null)
+            {
+                foreach(string arg in input.Attributes[0].Arguments.Split(","))
+                {
+                    if (arg.Contains("="))
+                    {
+                        string[] argPair = arg.Split("=");
+                        if (argPair.Length == 2 && argPair[0] == "$name")
+                        {
+                            return argPair[1].Trim();
+                        }
+                    }
+                }
+            }
+            return input.Name;
+        }
         public static bool IsNormalFunc(this CppFunction input)
         {
-            return input.Attributes.Any(x => x.Name == "LUA_FUNC");
+            return input.Attributes.Count > 0 && input.Attributes[0].Name == "LUA_FUNC";
         }
         public static bool IsNormalStaticFunc(this CppFunction input)
         {
-            if (input.IsNormalFunc() && input.Attributes[0].Arguments != null)
+            if (input.IsExposedFunc() && input.Attributes[0].Arguments != null)
                 return input.Attributes[0].Arguments.Contains("use_static");
+
+            return false;
+        }
+        public static bool IsNormalGenericFunc(this CppFunction input)
+        {
+            if (input.IsExposedFunc() && input.Attributes[0].Arguments != null)
+                return input.Attributes[0].Arguments.Contains("use_generic");
 
             return false;
         }
@@ -39,6 +64,10 @@ namespace LuaExpose
         public static bool IsOverloadFunc(this CppFunction input)
         {
             return input.Attributes.Any(x => x.Name == "LUA_FUNC_OVERLOAD");
+        }
+        public static bool IsExposedFunc(this CppFunction input)
+        {
+            return input.IsNormalFunc() || input.IsOverloadFunc();
         }
         public static bool IsTemplateFunc(this CppFunction input)
         {
@@ -58,7 +87,7 @@ namespace LuaExpose
         }
         public static List<CppFunction> GetNormalFunctions(this LuaUserType input)
         {
-            return (input.OriginalElement as ICppDeclarationContainer).Functions.Where(x => x.IsNormalFunc() || x.IsOverloadFunc()).ToList();
+            return (input.OriginalElement as ICppDeclarationContainer).Functions.Where(x => x.IsExposedFunc()).ToList();
         }
         public static List<CppFunction> GetMetaFunctions(this LuaUserType input)
         {
@@ -69,7 +98,7 @@ namespace LuaExpose
             if (input.OriginalElement is CppEnum)
                 return new List<CppEnum> { input.OriginalElement as CppEnum };
 
-            return (input.OriginalElement as ICppDeclarationContainer).Enums.Where(x => x.IsEnum()).ToList();
+            return (input.OriginalElement as ICppDeclarationContainer).Enums.Where(x => x.IsEnum() && x.SourceFile == input.OriginLocation).ToList();
         }
         public static List<CppClass> GetClasses(this LuaUserType input)
         {
@@ -105,8 +134,21 @@ namespace LuaExpose
             if (x.Contains("variadic_args")) {
                 return x.Replace("variadic_args", "sol::variadic_args");
             }
+            if (x.Contains("basic_table_core"))
+            {
+                return x.Replace("basic_table_core", "sol::table");
+            }
+            if (x.Contains("basic_object"))
+            {
+                return x.Replace("basic_object", "sol::object");
+            }
             if (x.Contains("basic_string")) {
                 return x.Replace("basic_string", "String");
+            }
+            if (x.Contains("shared_ptr") && input.TypeKind == CppTypeKind.StructOrClass)
+            {
+                CppClass inputClass = input as CppClass;
+                return $"std::shared_ptr<{inputClass.TemplateParameters[0].ConvertToSiegeType()}>";
             }
 
             return input.GetDisplayName();
@@ -117,7 +159,7 @@ namespace LuaExpose
             if ((input.Name == "" && input.Type.TypeKind == CppTypeKind.Unexposed && (input.Type as CppUnexposedType).Name == "T...") ||
                 (input.Name == "args" && input.Type.TypeKind == CppTypeKind.StructOrClass && (input.Type as CppClass).Name == "variadic_args"))
             {
-                return "...";
+                return "...args";
             }
             else
             {
@@ -130,18 +172,23 @@ namespace LuaExpose
             { "String", "string" },
             { "Unicode", "string" },
             { "Path", "string" },
-            { "EntityID", "number" },
-            { "ComponentID", "number" },
-            { "PrefabID", "number" },
-            { "TileID", "number" },
             { "CallbackHandle", "number" },
             { "basic_string", "string" },
             { "basic_object", "any" },
             { "basic_function", "any" },
+            { "basic_protected_function", "any"},
             { "basic_table_core", "any" },
             { "state_view", "any" },
             { "variadic_args", "any" },
             { "T...", "any" },
+        };
+
+        private static readonly List<string> PreservedTypedefs = new List<string>
+        {
+            "EntityID",
+            "ComponentID",
+            "PrefabID",
+            "TileID",
         };
 
         public static string ConvertToTealType(this CppType input, CppTypedef specialization = null)
@@ -183,7 +230,11 @@ namespace LuaExpose
                 case CppTypeKind.Typedef:
                     var typedef = input as CppTypedef;
 
-                    if (typedef.ElementType.TypeKind == CppTypeKind.Primitive 
+                    if (PreservedTypedefs.Contains(typedef.Name))
+                    {
+                        return typedef.Name;
+                    }
+                    else if (typedef.ElementType.TypeKind == CppTypeKind.Primitive 
                         || typedef.ElementType.TypeKind == CppTypeKind.Typedef)
                     {
                         return typedef.ElementType.ConvertToTealType(specialization);
@@ -197,7 +248,7 @@ namespace LuaExpose
                         var templatedClass = typedef.ElementType as CppClass;
                         if (templatedClass.Name == "vector")
                         {
-                            return $"{{{templatedClass.TemplateParameters[0].ConvertToTealType(specialization)}}}";
+                            return $"Array<{templatedClass.TemplateParameters[0].ConvertToTealType(specialization)}>";
                         }
                         else if (templatedClass.Name == "shared_ptr")
                         {
@@ -231,7 +282,7 @@ namespace LuaExpose
 
                         else if (name == "vector")
                         {
-                            return $"{{{(input as CppClass).TemplateParameters[0].ConvertToTealType(specialization)}}}";
+                            return $"Array<{(input as CppClass).TemplateParameters[0].ConvertToTealType(specialization)}>";
                         }
                         else if (name == "shared_ptr")
                         {
@@ -243,7 +294,7 @@ namespace LuaExpose
                         }
                     }
                 case CppTypeKind.Enum:
-                    return (input as CppEnum).Name;
+                    return (input as CppEnum).Name + " | number";
                 case CppTypeKind.TemplateParameterType:
                     return (input as CppTemplateParameterType).Name;
                 case CppTypeKind.Unexposed:

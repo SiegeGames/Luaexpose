@@ -22,6 +22,66 @@ namespace LuaExpose
             public string Name;
             public string ReturnType;
             public List<TealVariable> Parameters = new List<TealVariable>();
+            public List<string> Generics = new List<string>();
+            public bool HasGenerics { get { return Generics.Count > 0; } }
+            public bool IsStatic = false;
+            public TealFunction(string Name, string ReturnType)
+            {
+                this.Name = Name;
+                this.ReturnType = ReturnType.Length > 0 ? ReturnType : "void";
+            }
+            public TealFunction(string Name, string ReturnType, List<TealVariable> Parameters)
+            {
+                this.Name = Name;
+                this.ReturnType = ReturnType.Length > 0 ? ReturnType : "void";
+                this.Parameters = Parameters;
+            }
+            public TealFunction(CppFunction func, string className, CppTypedef specialization)
+            {
+                Name = func.GetName();
+                ReturnType = func.ReturnType.ConvertToTealType(specialization);
+                IsStatic = func.StorageQualifier == CppStorageQualifier.Static;
+                if (IsStatic)
+                {
+                    Parameters.Add(new TealVariable { Name = "this", Type = "void" });
+                }
+                Parameters.AddRange(func.Parameters.Select(param => new TealVariable {
+                    Name = param.GetTealName(),
+                    Type = param.Type.ConvertToTealType(specialization)
+                }).ToList());
+
+                Dictionary<string, string> typeRemapping = new Dictionary<string, string>();
+                if (func.IsExposedFunc() && func.Attributes[0].Arguments != null)
+                {
+                    foreach (string arg in func.Attributes[0].Arguments.Split(","))
+                    {
+                        string[] values = arg.Split("=");
+                        if (values.Length == 2)
+                        {
+                            typeRemapping[values[0]] = values[1];
+                        }
+                    }
+                }
+                if (typeRemapping.Count > 0)
+                {
+                    if (func.IsNormalGenericFunc())
+                    {
+                        Generics = typeRemapping.Values.Distinct().ToList();
+                    }
+                    foreach (TealVariable parameter in Parameters)
+                    {
+                        if (typeRemapping.ContainsKey(parameter.Name))
+                        {
+                            parameter.Type = typeRemapping[parameter.Name];
+                        }
+                    }
+                    if (typeRemapping.ContainsKey("return"))
+                    {
+                        ReturnType = typeRemapping["return"];
+                    }
+                }
+                ReturnType = ReturnType.Length > 0 ? ReturnType : "void";
+            }
         }
 
         public class TealEnum
@@ -43,6 +103,7 @@ namespace LuaExpose
             public List<TealFunction> Functions = new List<TealFunction>();
             public List<TealVariable> Fields = new List<TealVariable>();
             public CppTypedef Specialization;
+            public bool HasConstructors { get { return Constructors.Count > 0; } }
 
             public TealClass(CppClass cppClass, CppTypedef specialization = null)
             {
@@ -66,11 +127,15 @@ namespace LuaExpose
                     Constructors.AddRange(cppClass.Constructors
                         .Where(func => func.IsConstructor())
                         .Select(func => new TealFunction
-                        {
-                            Name = "new",
-                            ReturnType = Name,
-                            Parameters = func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType(Specialization) }).ToList()
-                        }));
+                        (
+                            "new",
+                            Name,
+                            func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType(Specialization) }).ToList()
+                        )));
+                    if (Constructors.Count == 0)
+                    {
+                        Constructors.Add(new TealFunction("new", Name));
+                    }
                 }
 
                 Fields.AddRange(cppClass.Fields
@@ -78,13 +143,8 @@ namespace LuaExpose
                     .Select(field => new TealVariable { Name = field.Name, Type = field.Type.ConvertToTealType(Specialization) }).ToList());
 
                 Functions.AddRange(cppClass.Functions
-                    .Where(func => func.IsNormalFunc() || func.IsOverloadFunc())
-                    .Select(func => new TealFunction
-                    {
-                        Name = func.Name,
-                        ReturnType = func.ReturnType.ConvertToTealType(Specialization),
-                        Parameters = func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType(Specialization) }).ToList()
-                    }));
+                    .Where(func => func.IsExposedFunc())
+                    .Select(func => new TealFunction(func, Name, Specialization)));
             }
         }
 
@@ -92,19 +152,24 @@ namespace LuaExpose
         {
             public string Name;
             public List<TealFunction> Functions = new List<TealFunction>();
-
+            public List<TealVariable> Fields = new List<TealVariable>();
+            public TealNamespace() { }
             public TealNamespace(LuaUserType userType)
             {
                 Name = userType.TypeNameLower;
+                if (Name == "var")
+                    Name = "Var";
 
                 Functions.AddRange((userType.OriginalElement as CppNamespace).Functions
-                .Where(func => func.IsNormalFunc() || func.IsOverloadFunc())
+                .Where(func => func.IsExposedFunc())
                 .Select(func => new TealFunction
-                {
-                    Name = func.Name,
-                    ReturnType = func.ReturnType.ConvertToTealType(),
-                    Parameters = func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType() }).ToList()
-                }));
+                (
+                    func.GetName(),
+                    func.ReturnType.ConvertToTealType(),
+                    func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType() }).ToList()
+                )));
+
+                Functions.ForEach(func => func.Parameters.Insert(0, new TealVariable { Name = "this", Type = "void" }));
             }
         }
 
@@ -118,6 +183,7 @@ namespace LuaExpose
             LinkedList<TealClass> classes = new LinkedList<TealClass>();
             LinkedList<TealEnum> enums = new LinkedList<TealEnum>();
             LinkedList<TealNamespace> namespaces = new LinkedList<TealNamespace>();
+            TealNamespace globalNamespace = new TealNamespace();
 
             bool FindSpecializationInNamespace(CppClass cppClass, CppNamespace cppNamespace, string specialization)
             {
@@ -161,7 +227,15 @@ namespace LuaExpose
                 }
                 else if (lu.IsNamespace)
                 {
-                    namespaces.AddLast(new TealNamespace(lu));
+                    TealNamespace tealNamespace = new TealNamespace(lu);
+                    if (tealNamespace.Name == "siege")
+                    {
+                        globalNamespace = tealNamespace;
+                    }
+                    else
+                    {
+                        namespaces.AddLast(tealNamespace);
+                    }
                 }
                 foreach (var parsedEnum in lu.Enums)
                 {
@@ -170,12 +244,12 @@ namespace LuaExpose
             }
 
             var scribe = Template.Parse(File.ReadAllText(template));
-            return scribe.Render(new { Classes = classes, Enums = enums, Namespaces = namespaces });
+            return scribe.Render(new { Classes = classes, Enums = enums, Namespaces = namespaces, Globals = globalNamespace });
         }
 
         protected override string GetUsertypeFileName(string usertypeFile)
         {
-            return $"{Path.GetFileNameWithoutExtension(usertypeFile).FirstCharToUpper()}.d.tl";
+            return $"{Path.GetFileNameWithoutExtension(usertypeFile).FirstCharToUpper()}.d.ts";
         }
 
         protected override void WriteAllFiles(string v, bool isGame)
