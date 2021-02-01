@@ -606,16 +606,33 @@ namespace LuaExpose
         {
             StringBuilder currentOutput = new StringBuilder();
 
-            currentOutput.Append($"state.new_enum(\"{e.Name}\",\n           ");
-            for (int i = 0; i < e.Items.Count(); i++)
+            if (e.Items.Count() > 30)
             {
-                currentOutput.Append($"\"{e.Items[i].Name}\", {e.Name}::{e.Items[i].Name}");
-                if (i != e.Items.Count() - 1)
+                currentOutput.Append($"state.new_enum<{e.Name}>(\"{e.Name}\", {{\n           ");
+                for (int i = 0; i < e.Items.Count(); i++)
                 {
-                    currentOutput.Append(",\n           ");
+                    currentOutput.Append($"{{ \"{e.Items[i].Name}\", {e.Name}::{e.Items[i].Name} }}");
+                    if (i != e.Items.Count() - 1)
+                    {
+                        currentOutput.Append(",\n           ");
+                    }
+                    else
+                        currentOutput.Append("\n        });\n        ");
                 }
-                else
-                    currentOutput.Append("\n        );\n        ");
+            }
+            else
+            {
+                currentOutput.Append($"state.new_enum(\"{e.Name}\",\n           ");
+                for (int i = 0; i < e.Items.Count(); i++)
+                {
+                    currentOutput.Append($"\"{e.Items[i].Name}\", {e.Name}::{e.Items[i].Name}");
+                    if (i != e.Items.Count() - 1)
+                    {
+                        currentOutput.Append(",\n           ");
+                    }
+                    else
+                        currentOutput.Append("\n        );\n        ");
+                }
             }
 
             extraIncludes.Add(AddTypeHeader(e));
