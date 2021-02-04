@@ -185,8 +185,12 @@ namespace LuaExpose
         {
             foreach (var f in userTypeFiles)
             {
-                var content = GetContentFromLuaUserFile(f.Value, Path.GetFileNameWithoutExtension(f.Key), isGame);
                 var newPath = Path.Combine(v, GetUsertypeFileName(f.Key));
+                if (File.Exists(newPath) && (new FileInfo(newPath)).LastWriteTime > (new FileInfo(f.Value.path)).LastWriteTime)
+                {
+                    continue;
+                }
+                var content = GetContentFromLuaUserFile(f.Value, Path.GetFileNameWithoutExtension(f.Key), isGame);
                 WriteFileContent(content, newPath);
             }
         }
