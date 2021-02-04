@@ -761,11 +761,13 @@ REPLACEMEWITHTEXT
 }
 ";
             StringBuilder fileContent = new StringBuilder();
+            string originalContent = "";
             var currentContent = "";
             // this is a case where we need to load the file and append potentially ? 
             if (fileExists)
             {
-                currentContent = File.ReadAllText(newPath).GetTextBetween("// BEGIN", "// END").Trim();
+                originalContent = File.ReadAllText(newPath);
+                currentContent = originalContent.GetTextBetween("// BEGIN", "// END").Trim();
                 fileContent.Append(currentContent);
             }
 
@@ -793,7 +795,10 @@ REPLACEMEWITHTEXT
                 content = content.Replace("REPLACEMESOMEMORE", "usertypes");
             }
 
-            WriteFileContent(content, newPath);
+            if (content != originalContent)
+            {
+                WriteFileContent(content, newPath);
+            }
 
             newFileName = $"LuaUsertypes.h";
             newPath = Path.Combine(v, newFileName);
@@ -801,7 +806,8 @@ REPLACEMEWITHTEXT
             fileContent.Clear();
             if (fileExists)
             {
-                currentContent = File.ReadAllText(newPath).GetTextBetween("// BEGIN", "// END").Trim();
+                originalContent = File.ReadAllText(newPath);
+                currentContent = originalContent.GetTextBetween("// BEGIN", "// END").Trim();
                 fileContent.Append(currentContent);
             }
 
@@ -827,7 +833,10 @@ REPLACEMEWITHTEXT
                 content = content.Replace("REPLACEMESOMEMORE", "usertypes");
             }
 
-            WriteFileContent(content, newPath);
+            if (content != originalContent)
+            {
+                WriteFileContent(content, newPath);
+            }
         }
     }
 }
