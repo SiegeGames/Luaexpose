@@ -9,46 +9,46 @@ using System.Threading.Tasks;
 
 namespace LuaExpose
 {
-    public class TealCodeGenWriter : CodeGenWriter
+    public class TypeScriptCodeGenWriter : CodeGenWriter
     {
-        public class TealVariable
+        public class TypeScriptVariable
         {
             public string Name;
             public string Type;
             public bool IsStatic;
         }
 
-        public class TealFunction
+        public class TypeScriptFunction
         {
             public string Name;
             public string ReturnType;
-            public List<TealVariable> Parameters = new List<TealVariable>();
+            public List<TypeScriptVariable> Parameters = new List<TypeScriptVariable>();
             public List<string> Generics = new List<string>();
             public bool HasGenerics { get { return Generics.Count > 0; } }
             public bool IsStatic = false;
-            public TealFunction(string Name, string ReturnType)
+            public TypeScriptFunction(string Name, string ReturnType)
             {
                 this.Name = Name;
                 this.ReturnType = ReturnType.Length > 0 ? ReturnType : "void";
             }
-            public TealFunction(string Name, string ReturnType, List<TealVariable> Parameters)
+            public TypeScriptFunction(string Name, string ReturnType, List<TypeScriptVariable> Parameters)
             {
                 this.Name = Name;
                 this.ReturnType = ReturnType.Length > 0 ? ReturnType : "void";
                 this.Parameters = Parameters;
             }
-            public TealFunction(CppFunction func, string className, CppTypedef specialization)
+            public TypeScriptFunction(CppFunction func, string className, CppTypedef specialization)
             {
                 Name = func.GetName();
-                ReturnType = func.ReturnType.ConvertToTealType(specialization);
+                ReturnType = func.ReturnType.ConvertToTypeScriptType(specialization);
                 IsStatic = func.StorageQualifier == CppStorageQualifier.Static;
                 if (IsStatic)
                 {
-                    Parameters.Add(new TealVariable { Name = "this", Type = "void" });
+                    Parameters.Add(new TypeScriptVariable { Name = "this", Type = "void" });
                 }
-                Parameters.AddRange(func.Parameters.Select(param => new TealVariable {
-                    Name = param.GetTealName(),
-                    Type = param.Type.ConvertToTealType(specialization)
+                Parameters.AddRange(func.Parameters.Select(param => new TypeScriptVariable {
+                    Name = param.GetTypeScriptName(),
+                    Type = param.Type.ConvertToTypeScriptType(specialization)
                 }).ToList());
 
                 Dictionary<string, string> typeRemapping = new Dictionary<string, string>();
@@ -69,7 +69,7 @@ namespace LuaExpose
                     {
                         Generics = typeRemapping.Values.Distinct().ToList();
                     }
-                    foreach (TealVariable parameter in Parameters)
+                    foreach (TypeScriptVariable parameter in Parameters)
                     {
                         if (typeRemapping.ContainsKey(parameter.Name))
                         {
@@ -85,28 +85,28 @@ namespace LuaExpose
             }
         }
 
-        public class TealEnum
+        public class TypeScriptEnum
         {
             public string Name;
             public List<string> Items = new List<string>();
 
-            public TealEnum(CppEnum parsedEnum)
+            public TypeScriptEnum(CppEnum parsedEnum)
             {
                 Name = parsedEnum.Name;
                 Items = parsedEnum.Items.Select(item => item.Name).ToList();
             }
         }
 
-        public class TealClass
+        public class TypeScriptClass
         {
             public string Name;
-            public List<TealFunction> Constructors = new List<TealFunction>();
-            public List<TealFunction> Functions = new List<TealFunction>();
-            public List<TealVariable> Fields = new List<TealVariable>();
+            public List<TypeScriptFunction> Constructors = new List<TypeScriptFunction>();
+            public List<TypeScriptFunction> Functions = new List<TypeScriptFunction>();
+            public List<TypeScriptVariable> Fields = new List<TypeScriptVariable>();
             public CppTypedef Specialization;
             public bool HasConstructors { get { return Constructors.Count > 0; } }
 
-            public TealClass(CppClass cppClass, CppTypedef specialization = null)
+            public TypeScriptClass(CppClass cppClass, CppTypedef specialization = null)
             {
                 Name = specialization != null ? specialization.Name : cppClass.Name;
                 Specialization = specialization;
@@ -127,40 +127,40 @@ namespace LuaExpose
                 {
                     Constructors.AddRange(cppClass.Constructors
                         .Where(func => func.IsConstructor())
-                        .Select(func => new TealFunction
+                        .Select(func => new TypeScriptFunction
                         (
                             "new",
                             Name,
-                            func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType(Specialization) }).ToList()
+                            func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(Specialization) }).ToList()
                         )));
                     if (Constructors.Count == 0)
                     {
-                        Constructors.Add(new TealFunction("new", Name));
+                        Constructors.Add(new TypeScriptFunction("new", Name));
                     }
                 }
 
                 Fields.AddRange(cppClass.Fields
                     .Where(field => field.IsNormalVar() || field.IsReadOnly())
-                    .Select(field => new TealVariable
+                    .Select(field => new TypeScriptVariable
                     {
                         Name = field.Name,
-                        Type = field.Type.ConvertToTealType(Specialization),
+                        Type = field.Type.ConvertToTypeScriptType(Specialization),
                         IsStatic = field.StorageQualifier == CppStorageQualifier.Static
                     }).ToList());
 
                 Functions.AddRange(cppClass.Functions
                     .Where(func => func.IsExposedFunc())
-                    .Select(func => new TealFunction(func, Name, Specialization)));
+                    .Select(func => new TypeScriptFunction(func, Name, Specialization)));
             }
         }
 
-        public class TealNamespace
+        public class TypeScriptNamespace
         {
             public string Name;
-            public List<TealFunction> Functions = new List<TealFunction>();
-            public List<TealVariable> Fields = new List<TealVariable>();
-            public TealNamespace() { }
-            public TealNamespace(LuaUserType userType)
+            public List<TypeScriptFunction> Functions = new List<TypeScriptFunction>();
+            public List<TypeScriptVariable> Fields = new List<TypeScriptVariable>();
+            public TypeScriptNamespace() { }
+            public TypeScriptNamespace(LuaUserType userType)
             {
                 Name = userType.TypeNameLower;
                 if (Name == "var")
@@ -168,18 +168,18 @@ namespace LuaExpose
 
                 Functions.AddRange((userType.OriginalElement as CppNamespace).Functions
                 .Where(func => func.IsExposedFunc())
-                .Select(func => new TealFunction
+                .Select(func => new TypeScriptFunction
                 (
                     func.GetName(),
-                    func.ReturnType.ConvertToTealType(),
-                    func.Parameters.Select(param => new TealVariable { Name = param.GetTealName(), Type = param.Type.ConvertToTealType() }).ToList()
+                    func.ReturnType.ConvertToTypeScriptType(),
+                    func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType() }).ToList()
                 )));
 
-                Functions.ForEach(func => func.Parameters.Insert(0, new TealVariable { Name = "this", Type = "void" }));
+                Functions.ForEach(func => func.Parameters.Insert(0, new TypeScriptVariable { Name = "this", Type = "void" }));
             }
         }
 
-        public TealCodeGenWriter(CppCompilation compilation, string scrib) : base(compilation, scrib)
+        public TypeScriptCodeGenWriter(CppCompilation compilation, string scrib) : base(compilation, scrib)
         {
             userTypeFilePattern = "*.d.ts";
         }
@@ -187,10 +187,10 @@ namespace LuaExpose
 
         protected override string GetContentFromLuaUserFile(LuaUserTypeFile value, string fileName, bool isGame)
         {
-            LinkedList<TealClass> classes = new LinkedList<TealClass>();
-            LinkedList<TealEnum> enums = new LinkedList<TealEnum>();
-            LinkedList<TealNamespace> namespaces = new LinkedList<TealNamespace>();
-            TealNamespace globalNamespace = new TealNamespace();
+            LinkedList<TypeScriptClass> classes = new LinkedList<TypeScriptClass>();
+            LinkedList<TypeScriptEnum> enums = new LinkedList<TypeScriptEnum>();
+            LinkedList<TypeScriptNamespace> namespaces = new LinkedList<TypeScriptNamespace>();
+            TypeScriptNamespace globalNamespace = new TypeScriptNamespace();
 
             bool FindSpecializationInNamespace(CppClass cppClass, CppNamespace cppNamespace, string specialization)
             {
@@ -198,7 +198,7 @@ namespace LuaExpose
                 {
                     if (cppTypedef.Name == specialization)
                     {
-                        classes.AddLast(new TealClass(cppClass, cppTypedef as CppTypedef));
+                        classes.AddLast(new TypeScriptClass(cppClass, cppTypedef as CppTypedef));
                         return true;
                     }
                 }
@@ -228,25 +228,25 @@ namespace LuaExpose
                         }
                         else
                         {
-                            classes.AddLast(new TealClass(cppClass));
+                            classes.AddLast(new TypeScriptClass(cppClass));
                         }
                     }
                 }
                 else if (lu.IsNamespace)
                 {
-                    TealNamespace tealNamespace = new TealNamespace(lu);
-                    if (tealNamespace.Name == "siege")
+                    TypeScriptNamespace scriptNamespace = new TypeScriptNamespace(lu);
+                    if (scriptNamespace.Name == "siege")
                     {
-                        globalNamespace = tealNamespace;
+                        globalNamespace = scriptNamespace;
                     }
                     else
                     {
-                        namespaces.AddLast(tealNamespace);
+                        namespaces.AddLast(scriptNamespace);
                     }
                 }
                 foreach (var parsedEnum in lu.Enums)
                 {
-                    enums.AddLast(new TealEnum(parsedEnum));
+                    enums.AddLast(new TypeScriptEnum(parsedEnum));
                 }
             }
 

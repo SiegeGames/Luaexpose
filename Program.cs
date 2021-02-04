@@ -53,10 +53,10 @@ namespace LuaExpose
             [Option('c', "cpp", Required = false, HelpText = "Siege Source Dir")]
             public string CppVersion { get; set; }
 
-            [Option('O', "tealoutput", Required = true, HelpText = "Teal Declaration Output")]
+            [Option('O', "tsoutput", Required = true, HelpText = "TypeScript Declaration Output")]
             public string Declarations { get; set; }
-            [Option('T', "tealtemp", Required = true, HelpText = "Teal Output Template")]
-            public string TealScrib { get; set; }
+            [Option('T', "tstemp", Required = true, HelpText = "TypeScript Output Template")]
+            public string TypeScriptScrib { get; set; }
         }
 
         static void Main(string[] args)
@@ -201,10 +201,10 @@ namespace LuaExpose
             {
                 Stopwatch localWatch = new Stopwatch();
                 localWatch.Start();
-                Console.WriteLine("Running TealCodeGenWriter");
-                var lua = new TealCodeGenWriter(compilation, opts.TealScrib);
+                Console.WriteLine("Running TypeScriptCodeGenWriter");
+                var lua = new TypeScriptCodeGenWriter(compilation, opts.TypeScriptScrib);
                 lua.Run(opts.Declarations, opts.IsGame);
-                WriteWatch(localWatch, "TealCodeGenWriter Runtime: ");
+                WriteWatch(localWatch, "TypeScriptCodeGenWriter Runtime: ");
             }
 
             WriteWatch(stopWatch, "Total Runtime: ");
