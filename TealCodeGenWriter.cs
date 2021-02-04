@@ -15,6 +15,7 @@ namespace LuaExpose
         {
             public string Name;
             public string Type;
+            public bool IsStatic;
         }
 
         public class TealFunction
@@ -140,7 +141,12 @@ namespace LuaExpose
 
                 Fields.AddRange(cppClass.Fields
                     .Where(field => field.IsNormalVar() || field.IsReadOnly())
-                    .Select(field => new TealVariable { Name = field.Name, Type = field.Type.ConvertToTealType(Specialization) }).ToList());
+                    .Select(field => new TealVariable
+                    {
+                        Name = field.Name,
+                        Type = field.Type.ConvertToTealType(Specialization),
+                        IsStatic = field.StorageQualifier == CppStorageQualifier.Static
+                    }).ToList());
 
                 Functions.AddRange(cppClass.Functions
                     .Where(func => func.IsExposedFunc())
