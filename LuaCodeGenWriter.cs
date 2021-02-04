@@ -15,7 +15,6 @@ namespace LuaExpose
         readonly List<string> globalHeaders = new List<string>
         {
             @"#include ""base/Types.h""",
-            @"#include ""scripting/usertypes/LuaUsertypes.h""",
             @"#include ""scripting/LuaCustomizations.h""",
         };
 
@@ -23,7 +22,6 @@ namespace LuaExpose
         {
             @"#include <base/Types.h>",
             @"#include <scripting/LuaCustomizations.h>",
-            @"#include ""LuaUsertypes.h""",
         };
 
         public LuaCodeGenWriter(CppCompilation compilation, string scrib) : base(compilation, scrib)
@@ -735,7 +733,6 @@ namespace LuaExpose
         {
             var newFileName = $"LuaUsertypes.cpp";
             var newPath = Path.Combine(v, newFileName);
-            var fileExists = File.Exists(newPath);
 
             var cppTemplate = @"#include REPLACEMEWITHHEADER
 
@@ -764,26 +761,16 @@ REPLACEMEWITHTEXT
 }
 ";
             StringBuilder fileContent = new StringBuilder();
-            string originalContent = "";
-            var currentContent = "";
-            // this is a case where we need to load the file and append potentially ? 
-            if (fileExists)
-            {
-                originalContent = File.ReadAllText(newPath);
-                currentContent = originalContent.GetTextBetween("// BEGIN", "// END").Trim();
-                fileContent.Append(currentContent);
-            }
+            string originalContent = File.Exists(newPath) ? File.ReadAllText(newPath) : "";
 
             foreach (var item in userTypeFiles)
             {
-                if (!currentContent.Contains(Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()))
-                    fileContent.Append($"        lua_expose_usertypes_{Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()}(state);\n");
+                fileContent.Append($"        lua_expose_usertypes_{Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()}(state);\n");
             }
 
             if (!isGame)
             {
-                if (!currentContent.Contains("usertypes_Game"))
-                    fileContent.Append($"        lua_expose_usertypes_Game(state);\n");
+                fileContent.Append($"        lua_expose_usertypes_Game(state);\n");
             }
 
             var content = cppTemplate.Replace("REPLACEMEWITHTEXT", fileContent.ToString());
@@ -805,25 +792,17 @@ REPLACEMEWITHTEXT
 
             newFileName = $"LuaUsertypes.h";
             newPath = Path.Combine(v, newFileName);
-
+            originalContent = File.Exists(newPath) ? File.ReadAllText(newPath) : "";
             fileContent.Clear();
-            if (fileExists)
-            {
-                originalContent = File.ReadAllText(newPath);
-                currentContent = originalContent.GetTextBetween("// BEGIN", "// END").Trim();
-                fileContent.Append(currentContent);
-            }
 
             foreach (var item in userTypeFiles)
             {
-                if (!currentContent.Contains(Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()))
-                    fileContent.Append($"    void lua_expose_usertypes_{Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()}(sol::state& state);\n");
+                fileContent.Append($"    void lua_expose_usertypes_{Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()}(sol::state& state);\n");
             }
 
             if (!isGame)
             {
-                if (!currentContent.Contains("usertypes_Game"))
-                    fileContent.Append($"    extern void lua_expose_usertypes_Game(sol::state& state);\n");
+                fileContent.Append($"    extern void lua_expose_usertypes_Game(sol::state& state);\n");
             }
 
             content = cppHeaderTemplate.Replace("REPLACEMEWITHTEXT", fileContent.ToString());
