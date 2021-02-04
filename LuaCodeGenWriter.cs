@@ -27,7 +27,10 @@ namespace LuaExpose
         };
 
         public LuaCodeGenWriter(CppCompilation compilation, string scrib) : base(compilation, scrib)
-        { }
+        {
+            userTypeFilePattern = "*.cpp";
+            preservedFiles.Add("LuaUsertypes.cpp");
+        }
 
         public string GenerateNamespaceSetup(LuaUserType lu)
         {            

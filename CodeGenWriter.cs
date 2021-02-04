@@ -49,6 +49,8 @@ namespace LuaExpose
         protected CppNamespace rootNamespace;
         protected CppCompilation compiledCode;
         protected Dictionary<string, LuaUserTypeFile> userTypeFiles;
+        protected string userTypeFilePattern;
+        protected List<string> preservedFiles = new List<string>();
 
         public CodeGenWriter(CppCompilation compilation, string scrib)
         {
@@ -203,7 +205,16 @@ namespace LuaExpose
 
             ParseNamespace(rootNamespace);
             WriteAllFiles(outLocation, isGame);
-        }
 
+            // Cleanup old files that either were deleted or on another branch
+            var generatedFiles = userTypeFiles.Keys.Select(f => Path.Combine(outLocation, GetUsertypeFileName(f)));
+            var oldFiles = Directory.EnumerateFiles(outLocation, userTypeFilePattern)
+                .Where(filePath => !generatedFiles.Contains(filePath) && !preservedFiles.Contains(Path.GetFileName(filePath)));
+
+            foreach (var oldFile in oldFiles)
+            {
+                File.Delete(oldFile);
+            }
+        }
     }
 }

@@ -180,8 +180,9 @@ namespace LuaExpose
         }
 
         public TealCodeGenWriter(CppCompilation compilation, string scrib) : base(compilation, scrib)
-        { }
-
+        {
+            userTypeFilePattern = "*.d.ts";
+        }
 
 
         protected override string GetContentFromLuaUserFile(LuaUserTypeFile value, string fileName, bool isGame)
