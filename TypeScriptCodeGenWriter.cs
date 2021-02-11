@@ -110,16 +110,16 @@ namespace LuaExpose
             {
                 Name = specialization != null ? specialization.Name : cppClass.Name;
                 Specialization = specialization;
-                addClass(cppClass);
+                addClass(cppClass, true);
             }
 
-            public void addClass(CppClass cppClass)
+            public void addClass(CppClass cppClass, bool addStaticFunctions)
             {
                 foreach (CppBaseType baseType in cppClass.BaseTypes)
                 {
                     if (baseType.Type.TypeKind == CppTypeKind.StructOrClass || baseType.Type.TypeKind == CppTypeKind.Typedef)
                     {
-                        addClass(baseType.Type as CppClass);
+                        addClass(baseType.Type as CppClass, false);
                     }
                 }
 
@@ -149,7 +149,7 @@ namespace LuaExpose
                     }).ToList());
 
                 Functions.AddRange(cppClass.Functions
-                    .Where(func => func.IsExposedFunc())
+                    .Where(func => func.IsExposedFunc() && (addStaticFunctions || func.StorageQualifier != CppStorageQualifier.Static))
                     .Select(func => new TypeScriptFunction(func, Name, Specialization)));
             }
         }
