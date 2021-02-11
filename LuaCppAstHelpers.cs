@@ -131,6 +131,10 @@ namespace LuaExpose
             if (x.Contains("basic_function")) {
                 return x.Replace("basic_function", "sol::function");
             }
+            if (x.Contains("basic_protected_function"))
+            {
+                return x.Replace("basic_protected_function", "sol::protected_function");
+            }
             if (x.Contains("variadic_args")) {
                 return x.Replace("variadic_args", "sol::variadic_args");
             }
