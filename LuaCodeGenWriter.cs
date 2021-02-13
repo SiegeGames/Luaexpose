@@ -269,6 +269,7 @@ namespace LuaExpose
 
                 currentOutput.Append($"state.new_usertype<{typeList[i]}>(\"{typeList[i]}\",\n            ");
                 var constructors = cpp.Constructors.Where(x => x.IsConstructor());
+                var factories = cpp.Functions.Where(x => x.IsConstructor());
 
                 // so if we don't have a constructor then we should make it happen
                 if (noConstructor.Any())
@@ -276,10 +277,43 @@ namespace LuaExpose
                     functionStrings.Add($"sol::no_constructor\n            ");
                 }
 
+                else if (factories.Any())
+                {
+                    StringBuilder factoriesOutput = new StringBuilder();
+                    // we have a constructor 
+                    factoriesOutput.Append($"sol::factories(\n");
+
+                    for (int j = 0; j < factories.Count(); j++)
+                    {
+                        var of = factories.ElementAt(j);
+                        var isClass = of.ReturnType is CppClass;
+                        if (isClass && (of.ReturnType as CppClass).Name != "shared_ptr")
+                        {
+                            factoriesOutput.Append($"   sol::resolve<sol::object(");
+                        }
+                        else
+                        {
+                            factoriesOutput.Append($"   sol::resolve<{of.ReturnType.ConvertToSiegeType()}(");
+                        }
+
+                        var paramList = string.Join(',', of.Parameters.Select(x => x.Type.ConvertToSiegeType()));
+
+                        factoriesOutput.Append($"{paramList})>(&{fullyQualifiedFunctionName}{of.Name})");
+
+                        if (j != factories.Count() - 1)
+                        {
+                            factoriesOutput.Append(",\n            ");
+                        }
+                        else
+                            factoriesOutput.Append("\n            )\n            ");
+                    }
+                    functionStrings.Add(factoriesOutput.ToString());
+                }
                 // we have a constructor set for functions
-                if (hasCS.Any() && constructors.Any())
+                else if (hasCS.Any() && constructors.Any())
                 {
                     StringBuilder constructorsOutput = new StringBuilder();
+
                     // we have a constructor 
                     constructorsOutput.Append($"sol::constructors<");
 

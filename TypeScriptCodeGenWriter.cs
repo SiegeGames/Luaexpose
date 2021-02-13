@@ -110,16 +110,16 @@ namespace LuaExpose
             {
                 Name = specialization != null ? specialization.Name : cppClass.Name;
                 Specialization = specialization;
-                addClass(cppClass, true);
+                addClass(cppClass, false);
             }
 
-            public void addClass(CppClass cppClass, bool addStaticFunctions)
+            public void addClass(CppClass cppClass, bool isBaseClass)
             {
                 foreach (CppBaseType baseType in cppClass.BaseTypes)
                 {
                     if (baseType.Type.TypeKind == CppTypeKind.StructOrClass || baseType.Type.TypeKind == CppTypeKind.Typedef)
                     {
-                        addClass(baseType.Type as CppClass, false);
+                        addClass(baseType.Type as CppClass, true);
                     }
                 }
 
@@ -133,7 +133,15 @@ namespace LuaExpose
                             Name,
                             func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(Specialization) }).ToList()
                         )));
-                    if (Constructors.Count == 0)
+                    Constructors.AddRange(cppClass.Functions
+                        .Where(func => func.IsConstructor())
+                        .Select(func => new TypeScriptFunction
+                        (
+                            "new",
+                            Name,
+                            func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(Specialization) }).ToList()
+                        )));
+                    if (Constructors.Count == 0 && !isBaseClass)
                     {
                         Constructors.Add(new TypeScriptFunction("new", Name));
                     }
@@ -149,7 +157,7 @@ namespace LuaExpose
                     }).ToList());
 
                 Functions.AddRange(cppClass.Functions
-                    .Where(func => func.IsExposedFunc() && (addStaticFunctions || func.StorageQualifier != CppStorageQualifier.Static))
+                    .Where(func => func.IsExposedFunc() && (!isBaseClass || func.StorageQualifier != CppStorageQualifier.Static))
                     .Select(func => new TypeScriptFunction(func, Name, Specialization)));
             }
         }
