@@ -26,6 +26,7 @@ namespace LuaExpose
             public List<string> Generics = new List<string>();
             public bool HasGenerics { get { return Generics.Count > 0; } }
             public bool IsStatic = false;
+            public bool IsPrivate = false;
             public TypeScriptFunction(string Name, string ReturnType)
             {
                 this.Name = Name;
@@ -145,6 +146,11 @@ namespace LuaExpose
                     {
                         Constructors.Add(new TypeScriptFunction("new", Name));
                     }
+                } else if (!isBaseClass)
+                {
+                    var constructor = new TypeScriptFunction("new", Name);
+                    constructor.IsPrivate = true;
+                    Constructors.Add(constructor);
                 }
 
                 Fields.AddRange(cppClass.Fields
