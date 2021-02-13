@@ -134,7 +134,10 @@ namespace LuaExpose
                             Name,
                             func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(Specialization) }).ToList()
                         )));
-                    Constructors.AddRange(cppClass.Functions
+
+                    if (!isBaseClass)
+                    {
+                        Constructors.AddRange(cppClass.Functions
                         .Where(func => func.IsConstructor())
                         .Select(func => new TypeScriptFunction
                         (
@@ -142,6 +145,7 @@ namespace LuaExpose
                             Name,
                             func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(Specialization) }).ToList()
                         )));
+                    }
                     if (Constructors.Count == 0 && !isBaseClass)
                     {
                         Constructors.Add(new TypeScriptFunction("new", Name));
