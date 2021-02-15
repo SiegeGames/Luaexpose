@@ -127,7 +127,7 @@ namespace LuaExpose
                 }
                 else
                 {
-                    currentOutput.Append($"{lu.TypeNameLower}.set_function(\"{cpp.GetName()}\", &{fullyQualifiedFunctionName}");
+                    currentOutput.Append($"{lu.TypeNameLower}.set_function(\"{cpp.GetName()}\"");
                 }
 
                 currentOutput.Append(", sol::overload(\n            ");
@@ -137,7 +137,7 @@ namespace LuaExpose
                 for (int i = 0; i < functionsWithSameName.Count(); i++)
                 {
                     var of = functionsWithSameName.ElementAt(i);
-                    currentOutput.Append($"sol::resolve<{cpp.ReturnType.GetDisplayName()}(");
+                    currentOutput.Append($"sol::resolve<{of.ReturnType.ConvertToSiegeType()}(");
                     var paramList = string.Join(',', of.Parameters.Select(x => x.Type.ConvertToSiegeType()));
                     currentOutput.Append($"{paramList})>(&{fullyQualifiedFunctionName})");
 
