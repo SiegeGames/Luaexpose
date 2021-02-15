@@ -138,7 +138,7 @@ namespace LuaExpose
                     if (!isBaseClass)
                     {
                         Constructors.AddRange(cppClass.Functions
-                        .Where(func => func.IsConstructor())
+                        .Where(func => func.IsConstructor() && func.StorageQualifier == CppStorageQualifier.Static)
                         .Select(func => new TypeScriptFunction
                         (
                             "new",

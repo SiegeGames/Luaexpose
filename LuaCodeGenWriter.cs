@@ -269,7 +269,7 @@ namespace LuaExpose
 
                 currentOutput.Append($"state.new_usertype<{typeList[i]}>(\"{typeList[i]}\",\n            ");
                 var constructors = cpp.Constructors.Where(x => x.IsConstructor());
-                var factories = cpp.Functions.Where(x => x.IsConstructor());
+                var factories = cpp.Functions.Where(x => x.IsConstructor() && x.StorageQualifier == CppStorageQualifier.Static);
 
                 // so if we don't have a constructor then we should make it happen
                 if (noConstructor.Any())
