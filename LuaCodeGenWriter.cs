@@ -170,7 +170,10 @@ namespace LuaExpose
                 path = inClass.Span.Start.File;
             var p = Path.GetFullPath(path);
             int s = p.LastIndexOf("siege");
-            var y = p.Substring(s).Replace("World.h", "World.hpp"); // stupid hack
+            // Use *.hpp instead of *.h
+            if (File.Exists(p + "pp"))
+                p += "pp";
+            var y = p.Substring(s);
 
             return $@"#include ""{y.Remove(0, 6).Replace('\\', '/')}""";
         }
@@ -695,8 +698,11 @@ namespace LuaExpose
                     s = p.LastIndexOf("src");
                     offset = 4;
                 }
+                // Use *.hpp instead of *.h
+                if (File.Exists(p + "pp"))
+                    p += "pp";
 
-                var y = p.Substring(s).Replace("World.h", "World.hpp"); ;
+                var y = p.Substring(s);
 
                 includeFiles.Enqueue($@"#include ""{y.Remove(0, offset).Replace('\\', '/')}""");
             });
