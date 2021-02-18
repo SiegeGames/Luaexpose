@@ -252,7 +252,7 @@ namespace LuaExpose
                         var templatedClass = typedef.ElementType as CppClass;
                         if (templatedClass.Name == "vector")
                         {
-                            return $"Array<{templatedClass.TemplateParameters[0].ConvertToTypeScriptType(specialization)}>";
+                            return $"ArrayList<{templatedClass.TemplateParameters[0].ConvertToTypeScriptType(specialization)}>";
                         }
                         else if (templatedClass.Name == "shared_ptr")
                         {
@@ -286,7 +286,7 @@ namespace LuaExpose
 
                         else if (name == "vector")
                         {
-                            return $"Array<{(input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(specialization)}>";
+                            return $"ArrayList<{(input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(specialization)}>";
                         }
                         else if (name == "shared_ptr")
                         {
