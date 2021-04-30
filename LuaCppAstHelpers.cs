@@ -250,7 +250,7 @@ namespace LuaExpose
                     else if (typedef.ElementType.TypeKind == CppTypeKind.StructOrClass && (typedef.ElementType as CppClass).TemplateParameters.Count > 0)
                     {
                         var templatedClass = typedef.ElementType as CppClass;
-                        if (templatedClass.Name == "vector")
+                        if (templatedClass.Name == "vector" || templatedClass.Name == "array")
                         {
                             return $"ArrayList<{templatedClass.TemplateParameters[0].ConvertToTypeScriptType(specialization)}>";
                         }
@@ -284,7 +284,7 @@ namespace LuaExpose
                             return "Rect";
                         }
 
-                        else if (name == "vector")
+                        else if (name == "vector" || name == "array")
                         {
                             return $"ArrayList<{(input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(specialization)}>";
                         }
