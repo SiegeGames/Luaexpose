@@ -414,17 +414,21 @@ namespace LuaExpose
                     WalkFunctionTree(cpp, functionList);
                 }
 
+                string templatedClassName = "";
                 if (isTemplated.Any())
                 {
-                    fullyQualifiedFunctionName = $"{typeList[i]}::";
+                    templatedClassName = typeList[i];
+                    fullyQualifiedFunctionName = $"{templatedClassName}::";
                 }
 
                 var overloadFunctions = functionList.Where(xsd => xsd.IsOverloadFunc());
 
-                var functionsWithSameName = functionList.GroupBy(x => x.Name).Where(group => group.Count() > 1).SelectMany(z => z).ToList();
+                var functionsWithSameName = functionList.GroupBy(x => x.GetName()).Where(group => group.Count() > 1).SelectMany(z => z).ToList();
                 functionsWithSameName.AddRange(overloadFunctions);
 
                 var foundStaticFuncs = functionList.Where(xsd => xsd.IsNormalStaticFunc()).Select(x => x.Name).ToList();
+
+                functionList.Sort((x, y) => x.Name.CompareTo(y.Name));
 
                 for (int w = 0; w < functionList.Count(); w++)
                 {
@@ -432,10 +436,13 @@ namespace LuaExpose
                     var ff = functionList[w];
                     var shouldAttemptStatic = ff.IsNormalStaticFunc() || foundStaticFuncs.Contains(ff.Name);
 
-                    if (functionsWithSameName.Any(x => x.Name == ff.Name) && !shouldAttemptStatic)
+                    string exposedName = ff.GetName();
+                    string funcExposedName = ff.IsMetaFunc() ? exposedName : $"\"{exposedName}\"";
+                    if (functionsWithSameName.Any(x => x.GetName() == exposedName) && !shouldAttemptStatic)
                     {
-                        var yy = functionsWithSameName.Where(z => z.Name == ff.Name).ToList();
-                        funcStringBuilder.Append($"\"{ff.GetName()}\", sol::overload(\n            ");
+                        var yy = functionsWithSameName.Where(z => z.GetName() == exposedName).ToList();
+
+                        funcStringBuilder.Append($"{funcExposedName}, sol::overload(\n            ");
                         for (int a = 0; a < yy.Count(); a++)
                         {
                             var methodConst = ff.Flags.HasFlag(CppFunctionFlags.Const);
@@ -447,10 +454,10 @@ namespace LuaExpose
                             }
                             else
                             {
-                                funcStringBuilder.Append($"   sol::resolve<{yy[a].ReturnType.ConvertToSiegeType()}(");
+                                funcStringBuilder.Append($"   sol::resolve<{yy[a].ReturnType.ConvertToSiegeType(templatedClassName)}(");
                             }
                             
-                            var paramList = string.Join(',', yy[a].Parameters.Select(x => x.Type.ConvertToSiegeType()));
+                            var paramList = string.Join(',', yy[a].Parameters.Select(x => x.Type.ConvertToSiegeType(templatedClassName)));
 
                             funcStringBuilder.Append($"{paramList}) {(methodConst ? "const" : "")} >(&{fullyQualifiedFunctionName}{yy[a].Name})");
 
@@ -468,7 +475,7 @@ namespace LuaExpose
                         // check and see if this should be a static function? 
                         if (ff.Attributes[0].Arguments == "use_static" || shouldAttemptStatic) {
                             // in this case we have to do something like an overload. 
-                            var paramList = string.Join(',', ff.Parameters.Select(x => x.Type.ConvertToSiegeType()));
+                            var paramList = string.Join(',', ff.Parameters.Select(x => x.Type.ConvertToSiegeType(templatedClassName)));
                             bool constReturn = false;
                             if (ff.ReturnType is CppAst.CppQualifiedType qr)
                                 constReturn = qr.Qualifier == CppTypeQualifier.Const;
@@ -478,14 +485,14 @@ namespace LuaExpose
 
                             var methodConst = ff.Flags.HasFlag(CppFunctionFlags.Const);
 
-                            funcStringBuilder.Append($"\"{ff.GetName()}\", static_cast<{ff.ReturnType.GetDisplayName()} ({fullyQualifiedFunctionName}*)({paramList})");
+                            funcStringBuilder.Append($"{funcExposedName}, static_cast<{ff.ReturnType.GetDisplayName()} ({fullyQualifiedFunctionName}*)({paramList})");
                             funcStringBuilder.Append($" {(methodConst ? "const" : "")} > (&{ fullyQualifiedFunctionName}{ ff.Name})");
 
 
                             funcStringBuilder.Append("\n            ");
                         }
                         else {
-                            funcStringBuilder.Append($"\"{ff.GetName()}\", &{fullyQualifiedFunctionName}{ff.Name}");
+                            funcStringBuilder.Append($"{funcExposedName}, &{fullyQualifiedFunctionName}{ff.Name}");
                             funcStringBuilder.Append("\n            ");
                         }
                     }
@@ -546,17 +553,6 @@ namespace LuaExpose
                     foreach (var uc in cpp.Classes)
                     {
                         fieldList.AddRange(uc.Fields.Where(z => (z.IsNormalVar() || z.IsReadOnly())));
-                    }
-                }
-
-                var metaFunctions = cpp.Functions.Where(z => z.IsMetaFunc());
-                if (metaFunctions.Count() != 0) {
-                    foreach (var m in metaFunctions) {
-                        var funcStringBuilder = new StringBuilder();
-                        funcStringBuilder.Append($"sol::{CppExtenstions.ConvertToMetaEnum(m.Attributes[0].Arguments)}, &{fullyQualifiedFunctionName}{m.Name}");
-                        funcStringBuilder.Append("\n            ");
-
-                        functionStrings.Add(funcStringBuilder.ToString());
                     }
                 }
 
@@ -784,7 +780,7 @@ namespace LuaExpose
 #include <sol/sol.hpp>
 
 namespace siege {
-    void lua_expose_REPLACEMESOMEMORE(sol::state& state) {
+    void lua_expose_REPLACEMESOMEMORE(sol::state_view& state) {
 // BEGIN
 REPLACEMEWITHTEXT
 // END
@@ -794,12 +790,12 @@ REPLACEMEWITHTEXT
             var cppHeaderTemplate = @"#pragma once
 
 namespace sol {
-    class state;
+    class state_view;
 }
 
 namespace siege {
 
-    void lua_expose_REPLACEMESOMEMORE(sol::state& state);
+    void lua_expose_REPLACEMESOMEMORE(sol::state_view& state);
 // BEGIN
 REPLACEMEWITHTEXT
 // END
@@ -842,12 +838,12 @@ REPLACEMEWITHTEXT
 
             foreach (var item in userTypeFiles)
             {
-                fileContent.Append($"    void lua_expose_usertypes_{Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()}(sol::state& state);\n");
+                fileContent.Append($"    void lua_expose_usertypes_{Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()}(sol::state_view& state);\n");
             }
 
             if (!isGame)
             {
-                fileContent.Append($"    extern void lua_expose_usertypes_Game(sol::state& state);\n");
+                fileContent.Append($"    extern void lua_expose_usertypes_Game(sol::state_view& state);\n");
             }
 
             content = cppHeaderTemplate.Replace("REPLACEMEWITHTEXT", fileContent.ToString());

@@ -167,7 +167,7 @@ namespace LuaExpose
                     }).ToList());
 
                 Functions.AddRange(cppClass.Functions
-                    .Where(func => func.IsExposedFunc() && (!isBaseClass || func.StorageQualifier != CppStorageQualifier.Static))
+                    .Where(func => (func.IsNormalFunc() || func.IsOverloadFunc()) && (!isBaseClass || func.StorageQualifier != CppStorageQualifier.Static))
                     .Select(func => new TypeScriptFunction(func, Name, Specialization)));
             }
         }

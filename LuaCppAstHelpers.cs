@@ -33,6 +33,10 @@ namespace LuaExpose
                     }
                 }
             }
+            if (input.IsMetaFunc())
+            {
+                return ConvertToMetaEnum(input.Attributes[0].Arguments);
+            }
             return input.Name;
         }
         public static bool IsNormalFunc(this CppFunction input)
@@ -67,7 +71,7 @@ namespace LuaExpose
         }
         public static bool IsExposedFunc(this CppFunction input)
         {
-            return input.IsNormalFunc() || input.IsOverloadFunc();
+            return input.IsNormalFunc() || input.IsOverloadFunc() || input.IsMetaFunc();
         }
         public static bool IsTemplateFunc(this CppFunction input)
         {
@@ -125,9 +129,13 @@ namespace LuaExpose
             return input.Attributes.Any(x => x.Name == "LUA_VAR");
         }
 
-        public static string ConvertToSiegeType(this CppType input)
+        public static string ConvertToSiegeType(this CppType input, string templatedClassName = "")
         {
             var x = input.GetDisplayName();
+            if (x.Contains("const const"))
+            {
+                x = x.Replace("const const", "const");
+            }
             if (x.Contains("basic_function")) {
                 return x.Replace("basic_function", "sol::function");
             }
@@ -149,10 +157,18 @@ namespace LuaExpose
             if (x.Contains("basic_string")) {
                 return x.Replace("basic_string", "String");
             }
+            if (x.Contains("Vec2<T, U>"))
+            {
+                return x.Replace("Vec2<T, U>", templatedClassName);
+            }
+            if (x.Contains("Rect<T, U>"))
+            {
+                return x.Replace("Rect<T, U>", templatedClassName);
+            }
             if (x.Contains("shared_ptr") && input.TypeKind == CppTypeKind.StructOrClass)
             {
                 CppClass inputClass = input as CppClass;
-                return $"std::shared_ptr<{inputClass.TemplateParameters[0].ConvertToSiegeType()}>";
+                return $"std::shared_ptr<{inputClass.TemplateParameters[0].ConvertToSiegeType(templatedClassName)}>";
             }
 
             return input.GetDisplayName();
@@ -348,12 +364,7 @@ namespace LuaExpose
 
         public static string ConvertToMetaEnum(string value)
         {
-            switch (value) {
-                case "index":
-                return "meta_function::index";
-                default:
-                    return String.Empty;
-            }
+            return "sol::meta_function::" + value;
         }
 
         public static bool DumpErrorsIfAny(this CppCompilation compilation)
