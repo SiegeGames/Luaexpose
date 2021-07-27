@@ -41,7 +41,7 @@ namespace LuaExpose
             public TypeScriptFunction(CppFunction func, string className, CppTypedef specialization)
             {
                 Name = func.GetName();
-                ReturnType = func.ReturnType.ConvertToTypeScriptType(specialization);
+                ReturnType = func.ReturnType.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Return, specialization);
                 IsStatic = func.StorageQualifier == CppStorageQualifier.Static;
                 if (IsStatic)
                 {
@@ -49,7 +49,7 @@ namespace LuaExpose
                 }
                 Parameters.AddRange(func.Parameters.Select(param => new TypeScriptVariable {
                     Name = param.GetTypeScriptName(),
-                    Type = param.Type.ConvertToTypeScriptType(specialization)
+                    Type = param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter, specialization)
                 }).ToList());
 
                 Dictionary<string, string> typeRemapping = new Dictionary<string, string>();
@@ -132,7 +132,7 @@ namespace LuaExpose
                         (
                             "new",
                             Name,
-                            func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(Specialization) }).ToList()
+                            func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter, Specialization) }).ToList()
                         )));
 
                     if (!isBaseClass)
@@ -143,7 +143,7 @@ namespace LuaExpose
                         (
                             "new",
                             Name,
-                            func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(Specialization) }).ToList()
+                            func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter, Specialization) }).ToList()
                         )));
                     }
                     if (Constructors.Count == 0 && !isBaseClass)
@@ -162,7 +162,7 @@ namespace LuaExpose
                     .Select(field => new TypeScriptVariable
                     {
                         Name = field.Name,
-                        Type = field.Type.ConvertToTypeScriptType(Specialization),
+                        Type = field.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Field, Specialization),
                         IsStatic = field.StorageQualifier == CppStorageQualifier.Static
                     }).ToList());
 
@@ -189,11 +189,21 @@ namespace LuaExpose
                 .Select(func => new TypeScriptFunction
                 (
                     func.GetName(),
-                    func.ReturnType.ConvertToTypeScriptType(),
-                    func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType() }).ToList()
+                    func.ReturnType.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Return),
+                    func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter) }).ToList()
                 )));
 
                 Functions.ForEach(func => func.Parameters.Insert(0, new TypeScriptVariable { Name = "this", Type = "void" }));
+
+                Fields.AddRange((userType.OriginalElement as CppNamespace).Fields
+                    .Where(field => field.IsNormalVar())
+                    .Select(field => new TypeScriptVariable
+                    {
+                        Name = field.GetName(),
+                        Type = field.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Field),
+                        IsStatic = field.StorageQualifier == CppStorageQualifier.Static
+                    })
+                );
             }
         }
 
@@ -280,19 +290,6 @@ namespace LuaExpose
         protected override void WriteAllFiles(string v, bool isGame)
         {
             base.WriteAllFiles(v, isGame);
-
-            // TODO(jmcmorris): We need proper topological sorting of the usertype files so that dependencies are loaded first
-    //        var newFileName = "..\\..\\tlconfig.lua";
-    //        var newPath = Path.Combine(v, newFileName);
-    //        string content = @"return {
-    //include_dir = {
-    //    'src\\teal\\',
-    //},
-    //preload_modules = {";
-
-    //        content += string.Join(",", userTypeFiles.Select(usertypeFile => $"\n    '{Path.GetFileNameWithoutExtension(usertypeFile.Key).FirstCharToUpper()}'"));
-    //        content += "\n    }\n}\n";
-    //        WriteFileContent(content, newPath);
         }
 
 

@@ -417,6 +417,7 @@ namespace LuaExpose
                 string templatedClassName = "";
                 if (isTemplated.Any())
                 {
+
                     templatedClassName = typeList[i];
                     fullyQualifiedFunctionName = $"{templatedClassName}::";
                 }
@@ -729,6 +730,20 @@ namespace LuaExpose
                             exposedFunctionsNames.Add(f.GetName());
                         }
                     }
+
+                    foreach (var field in (lu.OriginalElement as CppNamespace).Fields)
+                    {
+                        if (!field.IsNormalVar()) continue;
+
+                        var fullyQualifiedFieldName = $"{lu.TypeNameLower}::{field.Name}";
+                        if (lu.TypeNameLower == "siege")
+                        {
+                            fullyQualifiedFieldName = $"{field.Name}";
+                        }
+
+                        namespaces.AddLast($"state.set(\"{field.GetName()}\", &{fullyQualifiedFieldName});\n        ");
+                    }
+
                 }
 
                 if (lu.IsClass)

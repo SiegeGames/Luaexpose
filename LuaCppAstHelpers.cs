@@ -211,7 +211,14 @@ namespace LuaExpose
             "TileID",
         };
 
-        public static string ConvertToTypeScriptType(this CppType input, CppTypedef specialization = null)
+        public enum TypeScriptSourceType {
+            Parameter,
+            Return,
+            Field,
+        }
+
+
+        public static string ConvertToTypeScriptType(this CppType input, TypeScriptSourceType source, CppTypedef specialization = null)
         {
             switch (input.TypeKind)
             {
@@ -242,7 +249,7 @@ namespace LuaExpose
                 case CppTypeKind.Pointer:
                 case CppTypeKind.Reference:
                 case CppTypeKind.Qualified:
-                    return (input as CppTypeWithElementType).ElementType.ConvertToTypeScriptType(specialization);
+                    return (input as CppTypeWithElementType).ElementType.ConvertToTypeScriptType(source, specialization);
                 case CppTypeKind.Array:
                     break;
                 case CppTypeKind.Function:
@@ -257,7 +264,7 @@ namespace LuaExpose
                     else if (typedef.ElementType.TypeKind == CppTypeKind.Primitive 
                         || typedef.ElementType.TypeKind == CppTypeKind.Typedef)
                     {
-                        return typedef.ElementType.ConvertToTypeScriptType(specialization);
+                        return typedef.ElementType.ConvertToTypeScriptType(source, specialization);
                     }
                     else if (TypeMappings.ContainsKey(typedef.Name))
                     {
@@ -268,11 +275,11 @@ namespace LuaExpose
                         var templatedClass = typedef.ElementType as CppClass;
                         if (templatedClass.Name == "vector" || templatedClass.Name == "array")
                         {
-                            return $"ArrayList<{templatedClass.TemplateParameters[0].ConvertToTypeScriptType(specialization)}>";
+                            return $"ArrayList<{templatedClass.TemplateParameters[0].ConvertToTypeScriptType(source, specialization)}>";
                         }
                         else if (templatedClass.Name == "shared_ptr")
                         {
-                            return templatedClass.TemplateParameters[0].ConvertToTypeScriptType(specialization);
+                            return templatedClass.TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
                         }
                     }
                     return typedef.Name;
@@ -299,14 +306,18 @@ namespace LuaExpose
                         {
                             return "Rect";
                         }
+                        else if (name == "HashedString" && source == TypeScriptSourceType.Parameter)
+                        {
+                            return "HashedString | string";
+                        }
 
                         else if (name == "vector" || name == "array")
                         {
-                            return $"ArrayList<{(input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(specialization)}>";
+                            return $"ArrayList<{(input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(source, specialization)}>";
                         }
                         else if (name == "shared_ptr")
                         {
-                            return (input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(specialization);
+                            return (input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
                         }
                         else
                         {
@@ -337,8 +348,8 @@ namespace LuaExpose
                         {
                             var specializationClass = (specialization.ElementType as CppClass);
                             Dictionary<string, string> templateParameters = specializationClass.SpecializedTemplate.TemplateParameters
-                                .Select(parameter => parameter.ConvertToTypeScriptType(specialization))
-                                .Zip(specializationClass.TemplateParameters.Select(parameter => parameter.ConvertToTypeScriptType(specialization)))
+                                .Select(parameter => parameter.ConvertToTypeScriptType(source, specialization))
+                                .Zip(specializationClass.TemplateParameters.Select(parameter => parameter.ConvertToTypeScriptType(source, specialization)))
                                 .ToDictionary(x => x.First, x => x.Second);
 
                             if (name.StartsWith(specializationClass.Name))
