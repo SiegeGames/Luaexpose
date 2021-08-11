@@ -323,7 +323,7 @@ namespace LuaExpose
                     for (int j = 0; j < constructors.Count(); j++)
                     {
                         var of = constructors.ElementAt(j);
-                        var paramList = string.Join(',', of.Parameters.Select(x => x.Type.GetDisplayName()));
+                        var paramList = string.Join(',', of.Parameters.Select(x => x.Type.ConvertToSiegeType()));
                         constructorsOutput.Append($"{typeList[i]}({paramList})");
 
                         if (j != constructors.Count() - 1)
@@ -826,6 +826,7 @@ REPLACEMEWITHTEXT
 
             if (!isGame)
             {
+                fileContent.Append($"        lua_expose_usertypes_DataStream(state);\n");
                 fileContent.Append($"        lua_expose_usertypes_Game(state);\n");
             }
 
@@ -858,6 +859,7 @@ REPLACEMEWITHTEXT
 
             if (!isGame)
             {
+                fileContent.Append($"    void lua_expose_usertypes_DataStream(sol::state_view& state);\n");
                 fileContent.Append($"    extern void lua_expose_usertypes_Game(sol::state_view& state);\n");
             }
 
