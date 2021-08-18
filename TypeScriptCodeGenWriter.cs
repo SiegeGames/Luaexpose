@@ -207,7 +207,7 @@ namespace LuaExpose
             }
         }
 
-        public TypeScriptCodeGenWriter(CppCompilation compilation, string scrib) : base(compilation, scrib)
+        public TypeScriptCodeGenWriter(CppCompilation compilation, string scrib, string rootNS) : base(compilation, scrib, rootNS)
         {
             userTypeFilePattern = "*.d.ts";
         }

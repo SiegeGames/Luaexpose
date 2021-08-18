@@ -46,16 +46,18 @@ namespace LuaExpose
         }
 
         protected string template;
+        protected string generatedNamespace;
         protected CppNamespace rootNamespace;
         protected CppCompilation compiledCode;
         protected Dictionary<string, LuaUserTypeFile> userTypeFiles;
         protected string userTypeFilePattern;
         protected List<string> preservedFiles = new List<string>();
 
-        public CodeGenWriter(CppCompilation compilation, string scrib)
+        public CodeGenWriter(CppCompilation compilation, string scrib, string rootNS)
         {
             template = scrib;
-            rootNamespace = compilation.Namespaces.Where(x => x.Name.Contains("siege")).FirstOrDefault();
+            generatedNamespace = rootNS;
+            rootNamespace = compilation.Namespaces.Where(x => x.Name.Contains(rootNS)).FirstOrDefault();
             compiledCode = compilation;
             userTypeFiles = new Dictionary<string, LuaUserTypeFile>();
         }

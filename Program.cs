@@ -32,7 +32,8 @@ namespace LuaExpose
     {
         public class Options
         {
-           
+            [Option('n', "namespace", Required = true, HelpText = "Root namespace")]
+            public string RootNamespace { get; set; }
             [Option('r', "root", Required = true, HelpText = "Root Source Dir")]
             public string RootSource { get; set; }
 
@@ -194,7 +195,7 @@ namespace LuaExpose
                 Stopwatch localWatch = new Stopwatch();
                 localWatch.Start();
                 Console.WriteLine("Running LuaCodeGenWriter");
-                var lua = new LuaCodeGenWriter(compilation, opts.Scrib);
+                var lua = new LuaCodeGenWriter(compilation, opts.Scrib, opts.RootNamespace);
                 lua.Run(opts.Output, opts.IsGame);
                 WriteWatch(localWatch, "LuaCodeGenWriter Runtime: ");
             }
@@ -203,7 +204,7 @@ namespace LuaExpose
                 Stopwatch localWatch = new Stopwatch();
                 localWatch.Start();
                 Console.WriteLine("Running TypeScriptCodeGenWriter");
-                var lua = new TypeScriptCodeGenWriter(compilation, opts.TypeScriptScrib);
+                var lua = new TypeScriptCodeGenWriter(compilation, opts.TypeScriptScrib, opts.RootNamespace);
                 lua.Run(opts.Declarations, opts.IsGame);
                 WriteWatch(localWatch, "TypeScriptCodeGenWriter Runtime: ");
             }

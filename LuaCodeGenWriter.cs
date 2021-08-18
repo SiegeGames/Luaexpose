@@ -24,7 +24,7 @@ namespace LuaExpose
             @"#include <scripting/LuaCustomizations.h>",
         };
 
-        public LuaCodeGenWriter(CppCompilation compilation, string scrib) : base(compilation, scrib)
+        public LuaCodeGenWriter(CppCompilation compilation, string scrib, string rootNS) : base(compilation, scrib, rootNS)
         {
             userTypeFilePattern = "*.cpp";
             preservedFiles.Add("LuaUsertypes.cpp");
@@ -680,6 +680,7 @@ namespace LuaExpose
             ConcurrentQueue<string> includeFiles = new ConcurrentQueue<string>(isGame ? globalGameHeaders : globalHeaders);
             List<string> usings = new List<string>();
 
+            string rootNS = generatedNamespace;
             LinkedList<string> namespaces = new LinkedList<string>();
             LinkedList<string> classes = new LinkedList<string>();
             LinkedList<string> enums = new LinkedList<string>();
@@ -771,7 +772,7 @@ namespace LuaExpose
             }
 
             var scribe = Template.Parse(File.ReadAllText(template));
-            return scribe.Render(new { Includes = includes.Distinct(), Ltype = fileName.FirstCharToUpper(), Namespaces = namespaces, Classes = classes, Enums = enums, Usings = usings });
+            return scribe.Render(new { Includes = includes.Distinct(), Namespace = rootNS, Ltype = fileName.FirstCharToUpper(), Namespaces = namespaces, Classes = classes, Enums = enums, Usings = usings});
         }
 
         protected override string GetUsertypeFileName(string usertypeFile)
@@ -794,7 +795,7 @@ namespace LuaExpose
 
 #include <sol/sol.hpp>
 
-namespace siege {
+namespace REPLACEMEWITHNS {
     void lua_expose_REPLACEMESOMEMORE(sol::state_view& state) {
 // BEGIN
 REPLACEMEWITHTEXT
@@ -808,7 +809,7 @@ namespace sol {
     class state_view;
 }
 
-namespace siege {
+namespace REPLACEMEWITHNS {
 
     void lua_expose_REPLACEMESOMEMORE(sol::state_view& state);
 // BEGIN
@@ -842,6 +843,8 @@ REPLACEMEWITHTEXT
                 content = content.Replace("REPLACEMESOMEMORE", "usertypes");
             }
 
+            content = content.Replace("REPLACEMEWITHNS", generatedNamespace);
+
             if (content != originalContent)
             {
                 WriteFileContent(content, newPath);
@@ -862,7 +865,7 @@ REPLACEMEWITHTEXT
                 fileContent.Append($"    void lua_expose_usertypes_DataStream(sol::state_view& state);\n");
                 fileContent.Append($"    extern void lua_expose_usertypes_Game(sol::state_view& state);\n");
             }
-
+            
             content = cppHeaderTemplate.Replace("REPLACEMEWITHTEXT", fileContent.ToString());
             if (isGame)
             {
@@ -872,6 +875,8 @@ REPLACEMEWITHTEXT
             {
                 content = content.Replace("REPLACEMESOMEMORE", "usertypes");
             }
+
+            content = content.Replace("REPLACEMEWITHNS", generatedNamespace);
 
             if (content != originalContent)
             {
