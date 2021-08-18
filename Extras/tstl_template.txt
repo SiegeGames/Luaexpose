@@ -1,0 +1,43 @@
+declare global {
+    {{~ for enum in enums ~}}
+    enum {{ enum.name }} {
+        {{~ for item in enum.items ~}}
+        {{ item }},
+        {{~ end ~}}
+    }
+
+    {{~ end ~}}
+    {{~ for class in classes ~}}
+    {{~ if class.has_constructors ~}}    /** @customConstructor {{ class.name }}.new */{{end}}
+    class {{ class.name }} {
+        {{~ for ctor in class.constructors ~}}
+        {{ if ctor.is_private }}private {{end}}constructor({{ for param in ctor.parameters }}{{param.name}}: {{param.type}}{{if !for.last }}, {{ end }}{{ end }}){{if ctor.return_type != ""}}{{end}};
+        {{~ end ~}}
+        {{~ for f in class.functions ~}}
+        {{ if f.is_private }}private {{end}}{{ if f.is_static }}static {{end}}{{ f.name }}{{if f.has_generics}}<{{for generic in f.generics}}{{generic}}{{if !for.last }}, {{ end }}{{ end }}>{{ end }}({{ for param in f.parameters }}{{param.name}}: {{param.type}}{{if !for.last }}, {{ end }}{{ end }}){{ if f.return_type != "" }}: {{f.return_type}}{{ end }};
+        {{~ end ~}}
+        {{~ for field in class.fields ~}}
+        {{if field.is_static}}static {{ end}}{{ field.name }}: {{ field.type }};
+        {{~ end ~}}
+    }
+
+    {{~ end ~}}
+    {{~ for namespace in namespaces ~}}
+    /** @noSelf **/
+    namespace {{ namespace.name }} {
+        {{~ for f in namespace.functions ~}}
+        function {{ f.name }}{{if f.has_generics}}<{{for generic in f.generics}}{{generic}}{{if !for.last }}, {{ end }}{{ end }}>{{ end }}({{ for param in f.parameters }}{{param.name}}: {{param.type}}{{if !for.last }}, {{ end }}{{ end }}){{ if f.return_type != "" }}: {{f.return_type}}{{ end }};
+        {{~ end ~}}
+    }
+
+    {{~ end ~}}
+    {{~ for f in globals.functions ~}}
+    function {{ f.name }}{{if f.has_generics}}<{{for generic in f.generics}}{{generic}}{{if !for.last }}, {{ end }}{{ end }}>{{ end }}({{ for param in f.parameters }}{{param.name}}: {{param.type}}{{if !for.last }}, {{ end }}{{ end }}){{ if f.return_type != "" }}: {{f.return_type}}{{ end }};
+    {{~ end ~}}
+
+    {{~ for field in globals.fields ~}}
+    const {{ field.name }}: {{ field.type }};
+    {{~ end ~}}
+}
+
+export {}
