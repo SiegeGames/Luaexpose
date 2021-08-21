@@ -680,7 +680,6 @@ namespace LuaExpose
             ConcurrentQueue<string> includeFiles = new ConcurrentQueue<string>(isGame ? globalGameHeaders : globalHeaders);
             List<string> usings = new List<string>();
 
-            string rootNS = generatedNamespace;
             LinkedList<string> namespaces = new LinkedList<string>();
             LinkedList<string> classes = new LinkedList<string>();
             LinkedList<string> enums = new LinkedList<string>();
@@ -689,8 +688,8 @@ namespace LuaExpose
             value.userTypes.AsParallel().ForAll(x =>
             {
                 var p = Path.GetFullPath(x.Value.OriginLocation);
-                int s = p.LastIndexOf("siege");
-                int offset = 6;
+                int s = p.LastIndexOf(generatedNamespace);
+                int offset = generatedNamespace.Length + 1;
                 if (isGame)
                 {
                     s = p.LastIndexOf("src");
@@ -772,7 +771,7 @@ namespace LuaExpose
             }
 
             var scribe = Template.Parse(File.ReadAllText(template));
-            return scribe.Render(new { Includes = includes.Distinct(), Namespace = rootNS, Ltype = fileName.FirstCharToUpper(), Namespaces = namespaces, Classes = classes, Enums = enums, Usings = usings});
+            return scribe.Render(new { Includes = includes.Distinct(), Namespace = generatedNamespace, Ltype = fileName.FirstCharToUpper(), Namespaces = namespaces, Classes = classes, Enums = enums, Usings = usings});
         }
 
         protected override string GetUsertypeFileName(string usertypeFile)

@@ -348,6 +348,11 @@ namespace LuaExpose
                             name = ((input as CppUnexposedType).TemplateParameters[0] as CppUnexposedType).Name;
                         }
 
+                        int index = name.LastIndexOf("::");
+                        if (index != -1)
+                            name = name.Substring(index + 2);
+                        name = name.Replace("&&", "");
+
                         if (TypeMappings.ContainsKey(name))
                         {
                             return TypeMappings[name];
