@@ -2,7 +2,7 @@
 {{ end }}
 #include <sol/sol.hpp>
 
-namespace siege { 
+namespace {{ namespace }} { 
     void lua_expose_usertypes_{{ltype}}(sol::state_view& state) {
         {{ for us in usings }}{{ us }}
         {{ end }}

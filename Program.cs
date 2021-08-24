@@ -32,30 +32,32 @@ namespace LuaExpose
     {
         public class Options
         {
+            [Option('n', "namespace", Required = true, HelpText = "Root namespace")]
+            public string RootNamespace { get; set; }
             [Option('r', "root", Required = true, HelpText = "Root Source Dir")]
             public string RootSource { get; set; }
 
-            [Option('s', "siege", Required = true, HelpText = "Siege Source Dir")]
-            public string SiegeSource { get; set; }
+            [Option('i', "input", Required = true, HelpText = "Directory containing source code to expose to Lua")]
+            public string InputDirectory { get; set; }
 
-            [Option('o', "output", Required = true, HelpText = "Siege Source Dir")]
+            [Option('o', "output", Required = true, HelpText = "Directory where this tool should place its generated code")]
             public string Output { get; set; }
 
-            [Option('l', "lib", Required = true, HelpText = "Siege Source Dir")]
+            [Option('l', "lib", Required = true, HelpText = "Directory containing external library code")]
             public string libs { get; set; }
 
             [Option('t', "temp", Required = true, HelpText = "Lua Output Template")]
             public string Scrib { get; set; }
 
-            [Option('g', "game", Required = false, HelpText = "Siege Source Dir")]
+            [Option('g', "game", Required = false, HelpText = "Specifies whether this generation is done in the context of a Siege game")]
             public bool IsGame { get; set; }
 
-            [Option('c', "cpp", Required = false, HelpText = "Siege Source Dir")]
+            [Option('c', "cpp", Required = false, HelpText = "C++ version to use in generating C++ code")]
             public string CppVersion { get; set; }
 
-            [Option('O', "tsoutput", Required = true, HelpText = "TypeScript Declaration Output")]
+            [Option('O', "tsoutput", Required = false, HelpText = "TypeScript Declaration Output")]
             public string Declarations { get; set; }
-            [Option('T', "tstemp", Required = true, HelpText = "TypeScript Output Template")]
+            [Option('T', "tstemp", Required = false, HelpText = "TypeScript Output Template")]
             public string TypeScriptScrib { get; set; }
         }
 
@@ -99,9 +101,9 @@ namespace LuaExpose
             p.AdditionalArguments.Add("-Wno-unknown-attributes");
             p.IncludeFolders.Add(opts.RootSource);
             if (!opts.IsGame)
-                p.IncludeFolders.Add(opts.SiegeSource);
+                p.IncludeFolders.Add(opts.InputDirectory);
             else
-                p.SystemIncludeFolders.Add(opts.SiegeSource);
+                p.SystemIncludeFolders.Add(opts.InputDirectory);
             p.SystemIncludeFolders.Add($"{opts.libs}/SDL2/include");
             p.SystemIncludeFolders.Add($"{opts.libs}/parallel_hashmap/include");
             p.SystemIncludeFolders.Add($"{opts.libs}/bgfx/include");
@@ -149,7 +151,7 @@ namespace LuaExpose
                 p.SystemIncludeFolders.Add($"{opts.libs}/bgfx/include/compat/msvc");
             }
             
-            p.SystemIncludeFolders.Add($"{opts.SiegeSource}/external");
+            p.SystemIncludeFolders.Add($"{opts.InputDirectory}/external");
 
 
             //var actualFiles = f.Where(x =>
@@ -193,7 +195,7 @@ namespace LuaExpose
                 Stopwatch localWatch = new Stopwatch();
                 localWatch.Start();
                 Console.WriteLine("Running LuaCodeGenWriter");
-                var lua = new LuaCodeGenWriter(compilation, opts.Scrib);
+                var lua = new LuaCodeGenWriter(compilation, opts.Scrib, opts.RootNamespace);
                 lua.Run(opts.Output, opts.IsGame);
                 WriteWatch(localWatch, "LuaCodeGenWriter Runtime: ");
             }
@@ -202,7 +204,7 @@ namespace LuaExpose
                 Stopwatch localWatch = new Stopwatch();
                 localWatch.Start();
                 Console.WriteLine("Running TypeScriptCodeGenWriter");
-                var lua = new TypeScriptCodeGenWriter(compilation, opts.TypeScriptScrib);
+                var lua = new TypeScriptCodeGenWriter(compilation, opts.TypeScriptScrib, opts.RootNamespace);
                 lua.Run(opts.Declarations, opts.IsGame);
                 WriteWatch(localWatch, "TypeScriptCodeGenWriter Runtime: ");
             }
