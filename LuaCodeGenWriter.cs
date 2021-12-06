@@ -826,7 +826,6 @@ REPLACEMEWITHTEXT
 
             if (!isGame)
             {
-                fileContent.Append($"        lua_expose_usertypes_DataStream(state);\n");
                 fileContent.Append($"        lua_expose_usertypes_Game(state);\n");
             }
 
@@ -861,7 +860,6 @@ REPLACEMEWITHTEXT
 
             if (!isGame)
             {
-                fileContent.Append($"    void lua_expose_usertypes_DataStream(sol::state_view& state);\n");
                 fileContent.Append($"    extern void lua_expose_usertypes_Game(sol::state_view& state);\n");
             }
             
