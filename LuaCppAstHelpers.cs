@@ -129,6 +129,29 @@ namespace LuaExpose
             return input.Attributes.Any(x => x.Name == "LUA_VAR");
         }
 
+        public static CppTypeKind GetFinalTypeKind(this CppType input)
+        {
+            switch (input.TypeKind)
+            {
+                case CppTypeKind.Qualified:
+                    return (input as CppTypeWithElementType).ElementType.GetFinalTypeKind();
+                case CppTypeKind.Typedef:
+                    return (input as CppTypedef).ElementType.GetFinalTypeKind();
+                case CppTypeKind.Primitive:
+                case CppTypeKind.Pointer:
+                case CppTypeKind.Reference:
+                case CppTypeKind.Array:
+                case CppTypeKind.Function:
+                case CppTypeKind.Enum:
+                case CppTypeKind.TemplateParameterType:
+                case CppTypeKind.Unexposed:
+                case CppTypeKind.StructOrClass:
+                default:
+                    return input.TypeKind;
+            }
+
+        }
+
         public static string ConvertToSiegeType(this CppType input, string templatedClassName = "")
         {
             var x = input.GetDisplayName();

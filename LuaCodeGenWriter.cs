@@ -741,7 +741,8 @@ namespace LuaExpose
                             fullyQualifiedFieldName = $"{field.Name}";
                         }
 
-                        namespaces.AddLast($"state.set(\"{field.GetName()}\", &{fullyQualifiedFieldName});\n        ");
+                        bool useReference = field.Type.GetFinalTypeKind() != CppTypeKind.Primitive;
+                        namespaces.AddLast($"state.set(\"{field.GetName()}\", {(useReference ? "&" : "")}{fullyQualifiedFieldName});\n        ");
                     }
 
                 }
