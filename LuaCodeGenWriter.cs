@@ -52,7 +52,7 @@ namespace LuaExpose
 
             StringBuilder currentOutput = new StringBuilder();
             var fullyQualifiedFunctionName = $"{lu.TypeNameLower}::{cpp.Name}";
-            if (lu.TypeNameLower == "siege")
+            if (lu.TypeNameLower == generatedNamespace)
             {
                 fullyQualifiedFunctionName = $"{cpp.Name}";
             }
@@ -90,7 +90,7 @@ namespace LuaExpose
             if (functionsWithSameName.Count() == 1 && overloadFunctions.Count() == 0)
             {
                 // these are global functions and just get thrown into the state
-                if (lu.TypeNameLower == "siege")
+                if (lu.TypeNameLower == generatedNamespace)
                 {
                     currentOutput.Append($"state.set_function(\"{cpp.GetName()}\",&{fullyQualifiedFunctionName});\n        ");
                 }
@@ -121,7 +121,7 @@ namespace LuaExpose
             else
             {
                 // these are global functions and just get thrown into the state
-                if (lu.TypeNameLower == "siege")
+                if (lu.TypeNameLower == generatedNamespace)
                 {
                     currentOutput.Append($"state.set_function(\"{fullyQualifiedFunctionName}\"");
                 }
@@ -232,7 +232,7 @@ namespace LuaExpose
             }
 
             var fullyQualifiedFunctionName = $"{lu.TypeName}::";
-            if (lu.TypeNameLower == "siege")
+            if (lu.TypeNameLower == generatedNamespace)
             {
                 fullyQualifiedFunctionName = $"";
             }
@@ -712,7 +712,7 @@ namespace LuaExpose
                 {
                     if (fileName.ToLower() == "types")
                     {
-                        usings.Add("using namespace siege;");
+                        usings.Add($"using namespace {generatedNamespace};");
                     }
                     else
                     {
@@ -736,13 +736,15 @@ namespace LuaExpose
                         if (!field.IsNormalVar()) continue;
 
                         var fullyQualifiedFieldName = $"{lu.TypeNameLower}::{field.Name}";
-                        if (lu.TypeNameLower == "siege")
+                        var scope = lu.TypeNameLower;
+                        if (lu.TypeNameLower == generatedNamespace)
                         {
                             fullyQualifiedFieldName = $"{field.Name}";
+                            scope = "state";
                         }
 
                         bool useReference = field.Type.GetFinalTypeKind() != CppTypeKind.Primitive;
-                        namespaces.AddLast($"state.set(\"{field.GetName()}\", {(useReference ? "&" : "")}{fullyQualifiedFieldName});\n        ");
+                        namespaces.AddLast($"{scope}.set(\"{field.GetName()}\", {(useReference ? "&" : "")}{fullyQualifiedFieldName});\n        ");
                     }
 
                 }

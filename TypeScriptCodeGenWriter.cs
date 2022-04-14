@@ -263,7 +263,7 @@ namespace LuaExpose
                 else if (lu.IsNamespace)
                 {
                     TypeScriptNamespace scriptNamespace = new TypeScriptNamespace(lu);
-                    if (scriptNamespace.Name == "siege")
+                    if (scriptNamespace.Name == generatedNamespace)
                     {
                         globalNamespace = scriptNamespace;
                     }
