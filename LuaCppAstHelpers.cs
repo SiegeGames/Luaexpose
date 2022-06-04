@@ -224,6 +224,7 @@ namespace LuaExpose
             { "state_view", "any" },
             { "variadic_args", "any" },
             { "T...", "any" },
+            { "T", "any" },
         };
 
         private static readonly List<string> PreservedTypedefs = new List<string>

@@ -508,26 +508,48 @@ namespace LuaExpose
                     // we should add commas in here because we can! 
                     var attrParams = item.Attributes[0].Arguments.Split(',');
 
-                    // this is the case where we have the ...
-                    // which means we should find all the types on the left hand side
-                    List<CppClass> thingsWeCareAbout = new List<CppClass>();
-                    var baseType = attrParams[0];
-                    if (attrParams.Length > 1)
-                    {                        
-                        WalkTypeTreeForBase(baseType, rootNamespace, ref thingsWeCareAbout);
-                    }
-
-                    for (int w = 0; w < thingsWeCareAbout.Count; w++)
+                    if (attrParams.Length == 2 && attrParams[1] == "...")
                     {
-                        var funcStringBuilder = new StringBuilder();
+                        // this is the case where we have the ...
+                        // which means we should find all the types on the left hand side
+                        List<CppClass> thingsWeCareAbout = new List<CppClass>();
+                        var baseType = attrParams[0];
+                        if (attrParams.Length > 1)
+                        {
+                            WalkTypeTreeForBase(baseType, rootNamespace, ref thingsWeCareAbout);
+                        }
 
-                        extraIncludes.Add(AddTypeHeader(thingsWeCareAbout[w]));
+                        for (int w = 0; w < thingsWeCareAbout.Count; w++)
+                        {
+                            var funcStringBuilder = new StringBuilder();
 
-                        funcStringBuilder.Append($"\"{item.GetName()}{thingsWeCareAbout[w].Name.Replace(baseType, "") }\", &{fullyQualifiedFunctionName}{item.Name}<{thingsWeCareAbout[w].Name}>");
-                        funcStringBuilder.Append("\n            ");
+                            extraIncludes.Add(AddTypeHeader(thingsWeCareAbout[w]));
 
-                        functionStrings.Add(funcStringBuilder.ToString());
-                    }                    
+                            funcStringBuilder.Append($"\"{item.GetName()}{thingsWeCareAbout[w].Name.Replace(baseType, "") }\", &{fullyQualifiedFunctionName}{item.Name}<{thingsWeCareAbout[w].Name}>");
+                            funcStringBuilder.Append("\n            ");
+
+                            functionStrings.Add(funcStringBuilder.ToString());
+                        }
+                    } else
+                    {
+                        for (int w = 0; w < attrParams.Length; w++)
+                        {
+                            var funcStringBuilder = new StringBuilder();
+
+                            var attr = attrParams[w];
+                            List<CppElement> list = new List<CppElement>();
+                            WalkTypeTreeForType(attr, rootNamespace, ref list);
+                            if (list.Count > 0)
+                            {
+                                extraIncludes.Add(AddTypeHeader(list[0]));
+                            }
+
+                            funcStringBuilder.Append($"\"{item.GetName()}\", &{fullyQualifiedFunctionName}{item.Name}<{attr}>");
+                            funcStringBuilder.Append("\n            ");
+
+                            functionStrings.Add(funcStringBuilder.ToString());
+                        }
+                    }
                 }
 
 
@@ -766,6 +788,11 @@ namespace LuaExpose
             if (includes.Any(x => x.Contains("ui/")))
             {
                 includes.Add(@"#include ""ui/Element.hpp""");
+            }
+
+            if (includes.Any(x => x.Contains("core/Behavior.h")))
+            {
+                includes.Add(@"#include ""scripting/usertypes/LuaBehavior.hpp""");
             }
 
             if (includes.Any(x => x.Contains("base/Event.h")))

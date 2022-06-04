@@ -167,8 +167,22 @@ namespace LuaExpose
                     }).ToList());
 
                 Functions.AddRange(cppClass.Functions
-                    .Where(func => (func.IsNormalFunc() || func.IsOverloadFunc()) && (!isBaseClass || func.StorageQualifier != CppStorageQualifier.Static))
+                    .Where(func => (func.IsNormalFunc() || func.IsOverloadFunc() || func.IsTemplateFunc()) && (!isBaseClass || func.StorageQualifier != CppStorageQualifier.Static))
                     .Select(func => new TypeScriptFunction(func, Name, Specialization)));
+
+                // Ideally we'd pull out the function attribute arguments that has all of the specializations we want to expose
+                // Foreach one of these specializations we'd create a new TypeScriptFunction that'd get exposed
+                //foreach (var function in cppClass.Functions)
+                //{
+                //    if (function.IsTemplateFunc() && (!isBaseClass || function.StorageQualifier != CppStorageQualifier.Static))
+                //    {
+                //        var attrParams = function.Attributes[0].Arguments.Split(',');
+                //        foreach (var param in attrParams)
+                //        {
+                //            Functions.Add(new TypeScriptFunction(function, Name, param));
+                //        }
+                //    }
+                //}
             }
         }
 
