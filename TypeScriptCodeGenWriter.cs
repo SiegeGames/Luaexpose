@@ -32,11 +32,16 @@ namespace LuaExpose
                 this.Name = Name;
                 this.ReturnType = ReturnType.Length > 0 ? ReturnType : "void";
             }
-            public TypeScriptFunction(string Name, string ReturnType, List<TypeScriptVariable> Parameters)
+            public TypeScriptFunction(string Name, string ReturnType, CppFunction func, CppTypedef specialization)
             {
                 this.Name = Name;
                 this.ReturnType = ReturnType.Length > 0 ? ReturnType : "void";
-                this.Parameters = Parameters;
+                this.Parameters = func.Parameters.Select(param => new TypeScriptVariable {
+                    Name = param.GetTypeScriptName(),
+                    Type = param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter, specialization)
+                }).ToList();
+
+                remapTypes(func);
             }
             public TypeScriptFunction(CppFunction func, string className, CppTypedef specialization)
             {
@@ -51,9 +56,13 @@ namespace LuaExpose
                     Name = param.GetTypeScriptName(),
                     Type = param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter, specialization)
                 }).ToList());
+                remapTypes(func);
+            }
 
+            private void remapTypes(CppFunction func)
+            {
                 Dictionary<string, string> typeRemapping = new Dictionary<string, string>();
-                if (func.IsExposedFunc() && func.Attributes[0].Arguments != null)
+                if ((func.IsExposedFunc() || func.IsConstructor()) && func.Attributes[0].Arguments != null)
                 {
                     foreach (string arg in func.Attributes[0].Arguments.Split(","))
                     {
@@ -128,23 +137,13 @@ namespace LuaExpose
                 {
                     Constructors.AddRange(cppClass.Constructors
                         .Where(func => func.IsConstructor())
-                        .Select(func => new TypeScriptFunction
-                        (
-                            "new",
-                            Name,
-                            func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter, Specialization) }).ToList()
-                        )));
+                        .Select(func => new TypeScriptFunction("new", Name, func, Specialization)));
 
                     if (!isBaseClass)
                     {
                         Constructors.AddRange(cppClass.Functions
                         .Where(func => func.IsConstructor() && func.StorageQualifier == CppStorageQualifier.Static)
-                        .Select(func => new TypeScriptFunction
-                        (
-                            "new",
-                            Name,
-                            func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter, Specialization) }).ToList()
-                        )));
+                        .Select(func => new TypeScriptFunction("new", Name, func, Specialization)));
                     }
                     if (Constructors.Count == 0 && !isBaseClass)
                     {
@@ -204,7 +203,8 @@ namespace LuaExpose
                 (
                     func.GetName(),
                     func.ReturnType.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Return),
-                    func.Parameters.Select(param => new TypeScriptVariable { Name = param.GetTypeScriptName(), Type = param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter) }).ToList()
+                    func,
+                    null
                 )));
 
                 Functions.ForEach(func => func.Parameters.Insert(0, new TypeScriptVariable { Name = "this", Type = "void" }));

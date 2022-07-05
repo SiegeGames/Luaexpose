@@ -301,7 +301,7 @@ namespace LuaExpose
 
                         var paramList = string.Join(',', of.Parameters.Select(x => x.Type.ConvertToSiegeType()));
 
-                        factoriesOutput.Append($"{paramList})>(&{fullyQualifiedFunctionName}{of.Name})");
+                        factoriesOutput.Append($"{paramList})>(&{fullyQualifiedFunctionName}{of.GetName()})");
 
                         if (j != factories.Count() - 1)
                         {
