@@ -351,6 +351,10 @@ namespace LuaExpose
                         {
                             return (input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
                         }
+                        else if (name == "optional")
+                        {
+                            return (input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(source, specialization) + " | undefined";
+                        }
                         else
                         {
                             return name;
