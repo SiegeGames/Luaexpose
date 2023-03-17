@@ -375,6 +375,14 @@ namespace LuaExpose
                         {
                             name = ((input as CppUnexposedType).TemplateParameters[0] as CppUnexposedType).Name;
                         }
+                        else if (name.StartsWith("vector<") || name.StartsWith("array<"))
+                        {
+                            string templatedType = (input as CppUnexposedType).TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
+                            if (source == TypeScriptSourceType.Parameter)
+                                return $"ArrayList<{templatedType}> | Array<{templatedType}>";
+                            else
+                                return $"ArrayList<{templatedType}>";
+                        }
 
                         int index = name.LastIndexOf("::");
                         if (index != -1)
