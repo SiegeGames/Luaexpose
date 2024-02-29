@@ -552,6 +552,23 @@ namespace LuaExpose
                     }
                 }
 
+                var setterFuncs = cpp.Functions.Where(x => x.IsPropertySetter()).ToDictionary(x => (x.Name.StartsWith("set_") ? x.Name.Substring(4) : x.Name));
+                var propertyFuncs = cpp.Functions.Where(x => x.IsPropertyGetter());
+                foreach (var item in propertyFuncs)
+                {
+                    var propertyStringBuilder = new StringBuilder();
+                    var propertyName = (item.Name.StartsWith("get_") ? item.Name.Substring(4) : item.Name);
+                    propertyStringBuilder.Append($"\"{propertyName}\", sol::property(&{fullyQualifiedFunctionName}{item.Name}");
+                    if (setterFuncs.ContainsKey(propertyName))
+                    {
+                        propertyStringBuilder.Append($", &{fullyQualifiedFunctionName}{setterFuncs[propertyName].Name})");
+                    } else
+                    {
+                        propertyStringBuilder.Append(")");
+                    }
+                    propertyStringBuilder.Append("\n            ");
+                    functionStrings.Add(propertyStringBuilder.ToString());
+                }
 
                 void WalkFieldTree(CppClass inClass, List<CppField> funcs)
                 {

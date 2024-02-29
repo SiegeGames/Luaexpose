@@ -165,6 +165,14 @@ namespace LuaExpose
                         IsStatic = field.StorageQualifier == CppStorageQualifier.Static
                     }).ToList());
 
+                Fields.AddRange(cppClass.Functions
+                    .Where(func => func.IsPropertyGetter())
+                    .Select(func => new TypeScriptVariable
+                    {
+                        Name = func.Name.StartsWith("get_") ? func.Name.Substring(4) : func.Name,
+                        Type = func.ReturnType.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Return, Specialization),
+                    }).ToList());
+
                 Functions.AddRange(cppClass.Functions
                     .Where(func => (func.IsNormalFunc() || func.IsOverloadFunc() || func.IsTemplateFunc()) && (!isBaseClass || func.StorageQualifier != CppStorageQualifier.Static))
                     .Select(func => new TypeScriptFunction(func, Name, Specialization)));

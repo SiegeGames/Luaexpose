@@ -77,6 +77,14 @@ namespace LuaExpose
         {
             return input.Attributes.Any(x => x.Name == "LUA_FUNC_TEMPLATE");
         }
+        public static bool IsPropertyGetter(this CppFunction input)
+        {
+            return input.Attributes.Count > 0 && input.Attributes[0].Name == "LUA_PROPERTY_GET";
+        }
+        public static bool IsPropertySetter(this CppFunction input)
+        {
+            return input.Attributes.Count > 0 && input.Attributes[0].Name == "LUA_PROPERTY_SET";
+        }
         public static bool IsEnum(this CppEnum input)
         {
             return input.Attributes.Any(x => x.Name == "LUA_USERTYPE_ENUM");
