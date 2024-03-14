@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace LuaExpose
@@ -64,7 +65,8 @@ namespace LuaExpose
                 Dictionary<string, string> typeRemapping = new Dictionary<string, string>();
                 if ((func.IsExposedFunc() || func.IsConstructor()) && func.Attributes[0].Arguments != null)
                 {
-                    foreach (string arg in func.Attributes[0].Arguments.Split(","))
+                    string pattern = @"(?<!\[),(?<!\[[^\]]*,)(?![^\]]*\],)";
+                    foreach (string arg in Regex.Split(func.Attributes[0].Arguments, pattern))
                     {
                         string[] values = arg.Split("=");
                         if (values.Length == 2)
