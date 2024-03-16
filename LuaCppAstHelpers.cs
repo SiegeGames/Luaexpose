@@ -136,6 +136,12 @@ namespace LuaExpose
 
             return input.Attributes.Any(x => x.Name == "LUA_VAR");
         }
+        public static bool IsOptionalVar(this CppField input)
+        {
+            if (input.Attributes == null) return false;
+
+            return input.Attributes.Any(x => x.Name == "LUA_VAR_OPTIONAL");
+        }
 
         public static CppTypeKind GetFinalTypeKind(this CppType input)
         {

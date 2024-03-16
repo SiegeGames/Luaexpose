@@ -575,13 +575,13 @@ namespace LuaExpose
                     foreach (var bc in inClass.BaseTypes)
                     {
                         var c = bc.Type as CppClass;
-                        funcs.AddRange(c.Fields.Where(z => (z.IsNormalVar() || z.IsReadOnly())));
+                        funcs.AddRange(c.Fields.Where(z => (z.IsNormalVar() || z.IsReadOnly() || z.IsOptionalVar())));
                         WalkFieldTree(c, funcs);
                     }
                 }
 
                 List<CppField> fieldList = new List<CppField>();
-                fieldList.AddRange(cpp.Fields.Where(z => (z.IsNormalVar() || z.IsReadOnly())));
+                fieldList.AddRange(cpp.Fields.Where(z => (z.IsNormalVar() || z.IsReadOnly() || z.IsOptionalVar())));
                 // we need to walk the base data for any possible vars 
                 if (shouldAddBaseData)
                 {
@@ -592,7 +592,7 @@ namespace LuaExpose
                 {
                     foreach (var uc in cpp.Classes)
                     {
-                        fieldList.AddRange(uc.Fields.Where(z => (z.IsNormalVar() || z.IsReadOnly())));
+                        fieldList.AddRange(uc.Fields.Where(z => (z.IsNormalVar() || z.IsReadOnly() || z.IsOptionalVar())));
                     }
                 }
 
@@ -772,7 +772,7 @@ namespace LuaExpose
 
                     foreach (var field in (lu.OriginalElement as CppNamespace).Fields)
                     {
-                        if (!field.IsNormalVar()) continue;
+                        if (!field.IsNormalVar() && !field.IsOptionalVar()) continue;
 
                         var fullyQualifiedFieldName = $"{lu.TypeNameLower}::{field.Name}";
                         var scope = lu.TypeNameLower;

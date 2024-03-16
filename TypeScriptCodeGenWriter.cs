@@ -115,6 +115,7 @@ namespace LuaExpose
             public List<TypeScriptFunction> Constructors = new List<TypeScriptFunction>();
             public List<TypeScriptFunction> Functions = new List<TypeScriptFunction>();
             public List<TypeScriptVariable> Fields = new List<TypeScriptVariable>();
+            public List<TypeScriptVariable> OptionalFields = new List<TypeScriptVariable>();
             public CppTypedef Specialization;
             public bool HasConstructors { get { return Constructors.Count > 0; } }
 
@@ -160,6 +161,15 @@ namespace LuaExpose
 
                 Fields.AddRange(cppClass.Fields
                     .Where(field => field.IsNormalVar() || field.IsReadOnly())
+                    .Select(field => new TypeScriptVariable
+                    {
+                        Name = field.Name,
+                        Type = field.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Field, Specialization),
+                        IsStatic = field.StorageQualifier == CppStorageQualifier.Static
+                    }).ToList());
+
+                OptionalFields.AddRange(cppClass.Fields
+                    .Where(field => field.IsOptionalVar())
                     .Select(field => new TypeScriptVariable
                     {
                         Name = field.Name,
