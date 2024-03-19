@@ -112,6 +112,8 @@ namespace LuaExpose
             p.SystemIncludeFolders.Add($"{opts.libs}/box2d/include");
             p.SystemIncludeFolders.Add($"{opts.libs}/fmod/include");
             p.SystemIncludeFolders.Add($"{opts.libs}/steam/include");
+            p.SystemIncludeFolders.Add($"{opts.libs}/fmt/include");
+
 
             if (OperatingSystem.IsMacOS())
             {
@@ -125,7 +127,6 @@ namespace LuaExpose
                 p.SystemIncludeFolders.Add($"{opts.libs}/bgfx/include/compat/osx");
                 p.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
                 p.SystemIncludeFolders.Add($"{opts.libs}/invoke/include");
-                p.SystemIncludeFolders.Add($"{opts.libs}/fmt/include");
 
                 p.AdditionalArguments.Add("-stdlib=libc++");
             }
@@ -147,7 +148,6 @@ namespace LuaExpose
                 p.SystemIncludeFolders.Add($"/usr/lib/clang/{opts.CppVersion}/include");
                 p.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
                 p.SystemIncludeFolders.Add($"{opts.libs}/invoke/include");
-                p.SystemIncludeFolders.Add($"{opts.libs}/fmt/include");
 
             }
 
