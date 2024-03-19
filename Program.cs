@@ -124,7 +124,8 @@ namespace LuaExpose
                 p.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/11.0.3/include");
                 p.SystemIncludeFolders.Add($"{opts.libs}/bgfx/include/compat/osx");
                 p.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
-                p.SystemIncludeFolders.Add($"{opts.libs}/invoke/");
+                p.SystemIncludeFolders.Add($"{opts.libs}/invoke/include");
+                p.SystemIncludeFolders.Add($"{opts.libs}/fmt/include");
 
                 p.AdditionalArguments.Add("-stdlib=libc++");
             }
@@ -145,7 +146,9 @@ namespace LuaExpose
                 p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/9");
                 p.SystemIncludeFolders.Add($"/usr/lib/clang/{opts.CppVersion}/include");
                 p.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
-                p.SystemIncludeFolders.Add($"{opts.libs}/invoke/");
+                p.SystemIncludeFolders.Add($"{opts.libs}/invoke/include");
+                p.SystemIncludeFolders.Add($"{opts.libs}/fmt/include");
+
             }
 
             if (OperatingSystem.IsWindows())
