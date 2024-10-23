@@ -21,15 +21,15 @@ jobs:
         with:
           dotnet-version: '5.0.x'
       - run: sh Extras/build_all.sh
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@v4
         with:
           name: windows
           path: bin/Release/net5.0/win-x64/publish/
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@v4
         with:
           name: osx
           path: bin/Release/net5.0/osx-x64/publish/
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@v4
         with:
           name: linux-ubuntu-18.04
           path: bin/Release/net5.0/ubuntu.18.04-x64/publish/
