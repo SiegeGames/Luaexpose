@@ -104,7 +104,7 @@ namespace LuaExpose
                 p.IncludeFolders.Add(opts.InputDirectory);
             else
                 p.SystemIncludeFolders.Add(opts.InputDirectory);
-            p.SystemIncludeFolders.Add($"{opts.libs}/SDL2/include");
+            p.SystemIncludeFolders.Add($"{opts.libs}/SDL3/include");
             p.SystemIncludeFolders.Add($"{opts.libs}/parallel_hashmap/include");
             p.SystemIncludeFolders.Add($"{opts.libs}/bgfx/include");
             p.SystemIncludeFolders.Add($"{opts.libs}/luajit/include");
