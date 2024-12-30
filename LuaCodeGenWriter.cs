@@ -657,12 +657,12 @@ namespace LuaExpose
                         fieldStringBuilder.Append($"{usertype}[\"{f.Name}\"] = &{fullyQualifiedFunctionName}{f.Name}");
                     }
 
-                    fieldStringBuilder.Append("\n            ");
                     functionStrings.Add(fieldStringBuilder.ToString());
 
                 }
 
                 currentOutput.Append(string.Join(";\n            ", functionStrings));
+                currentOutput.Append(";\n            ");
             }
 
             return currentOutput.ToString();
