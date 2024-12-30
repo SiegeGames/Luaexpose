@@ -473,7 +473,7 @@ namespace LuaExpose
                                 funcStringBuilder.Append(",\n            ");
                             }
                             else
-                                funcStringBuilder.Append("\n            )\n            ");
+                                funcStringBuilder.Append("\n            )");
                         }
                     }
                     else
@@ -493,13 +493,9 @@ namespace LuaExpose
 
                             funcStringBuilder.Append($"{usertype}[{funcExposedName}] = static_cast<{ff.ReturnType.GetDisplayName()} ({fullyQualifiedFunctionName}*)({paramList})");
                             funcStringBuilder.Append($" {(methodConst ? "const" : "")} > (&{ fullyQualifiedFunctionName}{ ff.Name})");
-
-
-                            funcStringBuilder.Append("\n            ");
                         }
                         else {
                             funcStringBuilder.Append($"{usertype}[{funcExposedName}] = &{fullyQualifiedFunctionName}{ff.Name}");
-                            funcStringBuilder.Append("\n            ");
                         }
                     }
 
@@ -530,8 +526,7 @@ namespace LuaExpose
 
                             extraIncludes.Add(AddTypeHeader(thingsWeCareAbout[w]));
 
-                            funcStringBuilder.Append($"\"{item.GetName()}{thingsWeCareAbout[w].Name.Replace(baseType, "") }\", &{fullyQualifiedFunctionName}{item.Name}<{thingsWeCareAbout[w].Name}>");
-                            funcStringBuilder.Append("\n            ");
+                            funcStringBuilder.Append($"{usertype}[\"{item.GetName()}{thingsWeCareAbout[w].Name.Replace(baseType, "") }\"] = &{fullyQualifiedFunctionName}{item.Name}<{thingsWeCareAbout[w].Name}>");
 
                             functionStrings.Add(funcStringBuilder.ToString());
                         }
@@ -550,7 +545,6 @@ namespace LuaExpose
                             }
 
                             funcStringBuilder.Append($"{usertype}[\"{item.GetName()}\"] = &{fullyQualifiedFunctionName}{item.Name}<{attr}>");
-                            funcStringBuilder.Append("\n            ");
 
                             functionStrings.Add(funcStringBuilder.ToString());
                         }
@@ -571,7 +565,6 @@ namespace LuaExpose
                     {
                         propertyStringBuilder.Append(")");
                     }
-                    propertyStringBuilder.Append("\n            ");
                     functionStrings.Add(propertyStringBuilder.ToString());
                 }
 
@@ -647,7 +640,6 @@ namespace LuaExpose
                         returnString = $"-> {returnString}";
 
                     funcStringBuilder.Append($"{usertype}[\"{funcBindName}\"] = []({typeList[i]}& o{argBuilder}) {(boolShouldReturn ? returnString : "")} {{ {(boolShouldReturn ? "return" : "")} o.{m.Name}({callerOverride}); }}");
-                    funcStringBuilder.Append("\n            ");
 
                     functionStrings.Add(funcStringBuilder.ToString());
                 }
@@ -670,7 +662,7 @@ namespace LuaExpose
 
                 }
 
-                currentOutput.Append(string.Join(",", functionStrings));
+                currentOutput.Append(string.Join(";\n            ", functionStrings));
             }
 
             return currentOutput.ToString();
