@@ -271,7 +271,7 @@ namespace LuaExpose
                 }
 
                 string usertype = $"usertype{typeList[i]}";
-                currentOutput.Append($"auto {usertype} = state.new_usertype<{typeList[i]}>(\"{typeList[i]}\",\n            ");
+                currentOutput.Append($"auto {usertype} = state.new_usertype<{typeList[i]}>(\"{typeList[i]}\"");
                 var constructors = cpp.Constructors.Where(x => x.IsConstructor());
                 var factories = cpp.Functions.Where(x => x.IsConstructor() && x.StorageQualifier == CppStorageQualifier.Static);
 
@@ -406,9 +406,14 @@ namespace LuaExpose
                     }
                 }
 
-                currentOutput.Append(string.Join(",", functionStrings));
+                if (functionStrings.Count > 0)
+                {
+                    currentOutput.Append(",\n            ");
+                    currentOutput.Append(string.Join(",", functionStrings));
+                    functionStrings.Clear();
+                }
+
                 currentOutput.Append($");\n        ");
-                functionStrings.Clear();
 
                 // This will be a merged list of functions from the base and the current class
                 List<CppFunction> functionList = new List<CppFunction>();
