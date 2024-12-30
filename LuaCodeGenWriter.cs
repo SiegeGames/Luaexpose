@@ -219,7 +219,7 @@ namespace LuaExpose
 
                 foreach (var c in ns.Typedefs)
                 {
-                    if (c.Name == baseType) list.Add(c);                                        
+                    if (c.Name == baseType) list.Add(c);
                 }
 
                 if (ns is ICppGlobalDeclarationContainer nsa)
@@ -270,7 +270,8 @@ namespace LuaExpose
                     }
                 }
 
-                currentOutput.Append($"state.new_usertype<{typeList[i]}>(\"{typeList[i]}\",\n            ");
+                string usertype = $"usertype{typeList[i]}";
+                currentOutput.Append($"auto {usertype} = state.new_usertype<{typeList[i]}>(\"{typeList[i]}\",\n            ");
                 var constructors = cpp.Constructors.Where(x => x.IsConstructor());
                 var factories = cpp.Functions.Where(x => x.IsConstructor() && x.StorageQualifier == CppStorageQualifier.Static);
 
@@ -405,6 +406,10 @@ namespace LuaExpose
                     }
                 }
 
+                currentOutput.Append(string.Join(",", functionStrings));
+                currentOutput.Append($");\n        ");
+                functionStrings.Clear();
+
                 // This will be a merged list of functions from the base and the current class
                 List<CppFunction> functionList = new List<CppFunction>();
                 functionList.AddRange(cpp.Functions.Where(z => z.IsExposedFunc()));
@@ -443,7 +448,7 @@ namespace LuaExpose
                     {
                         var yy = functionsWithSameName.Where(z => z.GetName() == exposedName).ToList();
 
-                        funcStringBuilder.Append($"{funcExposedName}, sol::overload(\n            ");
+                        funcStringBuilder.Append($"{usertype}[{funcExposedName}] = sol::overload(\n            ");
                         for (int a = 0; a < yy.Count(); a++)
                         {
                             var methodConst = ff.Flags.HasFlag(CppFunctionFlags.Const);
@@ -486,14 +491,14 @@ namespace LuaExpose
 
                             var methodConst = ff.Flags.HasFlag(CppFunctionFlags.Const);
 
-                            funcStringBuilder.Append($"{funcExposedName}, static_cast<{ff.ReturnType.GetDisplayName()} ({fullyQualifiedFunctionName}*)({paramList})");
+                            funcStringBuilder.Append($"{usertype}[{funcExposedName}] = static_cast<{ff.ReturnType.GetDisplayName()} ({fullyQualifiedFunctionName}*)({paramList})");
                             funcStringBuilder.Append($" {(methodConst ? "const" : "")} > (&{ fullyQualifiedFunctionName}{ ff.Name})");
 
 
                             funcStringBuilder.Append("\n            ");
                         }
                         else {
-                            funcStringBuilder.Append($"{funcExposedName}, &{fullyQualifiedFunctionName}{ff.Name}");
+                            funcStringBuilder.Append($"{usertype}[{funcExposedName}] = &{fullyQualifiedFunctionName}{ff.Name}");
                             funcStringBuilder.Append("\n            ");
                         }
                     }
@@ -544,7 +549,7 @@ namespace LuaExpose
                                 extraIncludes.Add(AddTypeHeader(list[0]));
                             }
 
-                            funcStringBuilder.Append($"\"{item.GetName()}\", &{fullyQualifiedFunctionName}{item.Name}<{attr}>");
+                            funcStringBuilder.Append($"{usertype}[\"{item.GetName()}\"] = &{fullyQualifiedFunctionName}{item.Name}<{attr}>");
                             funcStringBuilder.Append("\n            ");
 
                             functionStrings.Add(funcStringBuilder.ToString());
@@ -558,7 +563,7 @@ namespace LuaExpose
                 {
                     var propertyStringBuilder = new StringBuilder();
                     var propertyName = (item.Name.StartsWith("get_") ? item.Name.Substring(4) : item.Name);
-                    propertyStringBuilder.Append($"\"{propertyName}\", sol::property(&{fullyQualifiedFunctionName}{item.Name}");
+                    propertyStringBuilder.Append($"{usertype}[\"{propertyName}\"] = sol::property(&{fullyQualifiedFunctionName}{item.Name}");
                     if (setterFuncs.ContainsKey(propertyName))
                     {
                         propertyStringBuilder.Append($", &{fullyQualifiedFunctionName}{setterFuncs[propertyName].Name})");
@@ -641,7 +646,7 @@ namespace LuaExpose
                     if (boolShouldReturn)
                         returnString = $"-> {returnString}";
 
-                    funcStringBuilder.Append($"\"{funcBindName}\", []({typeList[i]}& o{argBuilder}) {(boolShouldReturn ? returnString : "")} {{ {(boolShouldReturn ? "return" : "")} o.{m.Name}({callerOverride}); }}");
+                    funcStringBuilder.Append($"{usertype}[\"{funcBindName}\"] = []({typeList[i]}& o{argBuilder}) {(boolShouldReturn ? returnString : "")} {{ {(boolShouldReturn ? "return" : "")} o.{m.Name}({callerOverride}); }}");
                     funcStringBuilder.Append("\n            ");
 
                     functionStrings.Add(funcStringBuilder.ToString());
@@ -652,12 +657,12 @@ namespace LuaExpose
                     var fieldStringBuilder = new StringBuilder();
                     if (f.IsReadOnly())
                     {
-                        fieldStringBuilder.Append($"\"{f.Name}\", sol::readonly(&{fullyQualifiedFunctionName}{f.Name})");
+                        fieldStringBuilder.Append($"{usertype}[\"{f.Name}\"] = sol::readonly(&{fullyQualifiedFunctionName}{f.Name})");
 
                     }
                     else
                     {
-                        fieldStringBuilder.Append($"\"{f.Name}\", &{fullyQualifiedFunctionName}{f.Name}");
+                        fieldStringBuilder.Append($"{usertype}[\"{f.Name}\"] = &{fullyQualifiedFunctionName}{f.Name}");
                     }
 
                     fieldStringBuilder.Append("\n            ");
@@ -666,12 +671,7 @@ namespace LuaExpose
                 }
 
                 currentOutput.Append(string.Join(",", functionStrings));
-
-                currentOutput.Append($");\n        ");
             }
-
-
-           
 
             return currentOutput.ToString();
         }
