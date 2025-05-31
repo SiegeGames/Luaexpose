@@ -1,0 +1,40 @@
+SIMPLE INTEGRATION - Copy these exact changes into Program.cs:
+
+1. Add at the top with other using statements (around line 14):
+using LuaExpose.DirectParser;
+
+2. Add to Options class (after line 62, before the closing brace):
+
+            [Option("use-direct-parser", Required = false, Default = false, 
+                HelpText = "Use the lightweight DirectParser instead of CppAST")]
+            public bool UseDirectParser { get; set; }
+
+            [Option("test-parser", Required = false, Default = false,
+                HelpText = "Run DirectParser tests")]
+            public bool TestParser { get; set; }
+
+3. Add at the beginning of RunOptions method (after line 72):
+
+            if (opts.TestParser)
+            {
+                DirectParser.TestParser.RunTests();
+                return;
+            }
+
+4. Replace line 183:
+            var compilation = CppParser.ParseFiles(actualFiles.ToList(), p);
+
+With:
+            CppCompilation compilation;
+            if (opts.UseDirectParser)
+            {
+                compilation = DirectParser.ProgramIntegration.ParseWithDirectParser(actualFiles.ToList(), opts);
+            }
+            else
+            {
+                compilation = CppParser.ParseFiles(actualFiles.ToList(), p);
+            }
+
+That's it! Now you can use:
+- dotnet run -- --test-parser                           # Test the parser
+- dotnet run -- [your normal args] --use-direct-parser  # Use DirectParser instead of CppAST
