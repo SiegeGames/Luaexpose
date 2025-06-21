@@ -12,6 +12,7 @@ using System.Text;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using CommandLine;
+using LuaExpose.DirectParser;
 
 namespace LuaExpose
 {
@@ -28,7 +29,7 @@ namespace LuaExpose
             RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
     }
 
-    class Program
+    public class Program
     {
         public class Options
         {
@@ -59,6 +60,14 @@ namespace LuaExpose
             public string Declarations { get; set; }
             [Option('T', "tstemp", Required = false, HelpText = "TypeScript Output Template")]
             public string TypeScriptScrib { get; set; }
+
+            [Option("use-direct-parser", Required = false, Default = false,
+             HelpText = "Use the lightweight DirectParser instead of CppAST")]
+            public bool UseDirectParser { get; set; }
+
+            [Option("test-parser", Required = false, Default = false,
+              HelpText = "Run DirectParser tests")]
+            public bool TestParser { get; set; }
         }
 
         static void Main(string[] args)
@@ -67,8 +76,42 @@ namespace LuaExpose
             .WithParsed(RunOptions);
         }
 
+        static void PrintNamespaceHierarchy(CppNamespace ns, int indent)
+        {
+            var indentStr = new string(' ', indent * 2);
+            Console.WriteLine($"{indentStr}Namespace: {ns.Name}");
+            Console.WriteLine($"{indentStr}  Attributes: {ns.Attributes.Count}");
+            foreach (var attr in ns.Attributes)
+            {
+                Console.WriteLine($"{indentStr}    - {attr.Name} (file: {attr.Span.Start.File ?? "NULL"})");
+            }
+            Console.WriteLine($"{indentStr}  Classes: {ns.Classes.Count}");
+            Console.WriteLine($"{indentStr}  Nested namespaces: {ns.Namespaces.Count}");
+            
+            foreach (var nested in ns.Namespaces)
+            {
+                PrintNamespaceHierarchy(nested, indent + 1);
+            }
+        }
+        
         static void RunOptions(Options opts)
         {
+            if (opts.TestParser)
+            {
+              DirectParser.TestParser.RunTests();
+              
+              // Test specific files
+              Console.WriteLine("\n\n=== Testing specific header files ===");
+              //TestDirectParserSingle.TestSingleFile("/mnt/d/Luaexpose/Luaexpose/InputExamples/siege/Animation.h");
+              TestDirectParserSingle.TestSingleFile("/mnt/d/Luaexpose/Luaexpose/InputExamples/siege/Component.h");
+              //TestDirectParserSingle.TestSingleFile("/mnt/d/Luaexpose/Luaexpose/InputExamples/siege/Entity.h");
+              
+              // Test single file generation
+             // TestSingleFileGeneration.TestAudioFile();
+              
+              return;
+            }
+
             Console.WriteLine("Running Code Gen");
             var currentTime = 0L;
             var last_run = @"last_run.txt";
@@ -85,7 +128,9 @@ namespace LuaExpose
                 Console.WriteLine("Initial run, parsing all code");
             }
 
-            var f = Directory.EnumerateFiles(opts.RootSource, "*.h", SearchOption.AllDirectories);
+            var fh = Directory.EnumerateFiles(opts.RootSource, "*.h", SearchOption.AllDirectories);
+            var fhpp = Directory.EnumerateFiles(opts.RootSource, "*.hpp", SearchOption.AllDirectories);
+            var f = fh.Concat(fhpp);
             CppParserOptions p = new CppParserOptions();
             p.ParseComments = false;
             p.Defines.Add("_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH");
@@ -179,12 +224,27 @@ namespace LuaExpose
             Console.WriteLine($"Using libClang to parse {actualFiles.Count()} Files");
 
             p.ParseMacros = true;
-            var compilation = CppParser.ParseFiles(actualFiles.ToList(), p);
+            CppCompilation compilation;
+            if (opts.UseDirectParser)
+            {
+              compilation = DirectParser.ProgramIntegration.ParseWithDirectParser(actualFiles.ToList(), opts);
+            }
+            else
+            {
+              compilation = CppParser.ParseFiles(actualFiles.ToList(), p);
+            }
 
             if (compilation.DumpErrorsIfAny())
             {
                 return;
             }
+            
+            // Debug: Print namespace hierarchy
+            //Console.WriteLine("\n[Debug] Compilation namespace hierarchy:");
+            //foreach (var ns in compilation.Namespaces)
+            //{
+            //    PrintNamespaceHierarchy(ns, 0);
+            //}
 
             void WriteWatch(Stopwatch watch, string prefix)
             {

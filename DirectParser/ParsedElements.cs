@@ -15,14 +15,17 @@ namespace LuaExpose.DirectParser
         public List<ParsedFunction> Functions { get; set; } = new List<ParsedFunction>();
         public List<ParsedEnum> Enums { get; set; } = new List<ParsedEnum>();
         public List<ParsedField> Fields { get; set; } = new List<ParsedField>();
+        public List<ParsedTypedef> Typedefs { get; set; } = new List<ParsedTypedef>();
     }
 
     public class ParsedNamespace : ParsedScope
     {
         public string Name { get; set; }
         public List<ParsedAttribute> Attributes { get; set; } = new List<ParsedAttribute>();
+        public List<ParsedNamespace> NestedNamespaces { get; set; } = new List<ParsedNamespace>();
         public int StartOffset { get; set; }
         public int EndOffset { get; set; }
+        public string FilePath { get; set; }
     }
 
     public class ParsedClass
@@ -33,6 +36,7 @@ namespace LuaExpose.DirectParser
         public List<ParsedAttribute> Attributes { get; set; } = new List<ParsedAttribute>();
         public List<ParsedFunction> Functions { get; set; } = new List<ParsedFunction>();
         public List<ParsedField> Fields { get; set; } = new List<ParsedField>();
+        public string FilePath { get; set; }
         public int StartOffset { get; set; }
         public int EndOffset { get; set; }
 
@@ -52,6 +56,9 @@ namespace LuaExpose.DirectParser
         public bool IsOverride { get; set; }
         public string Namespace { get; set; }
         public ParsedClass ContainingClass { get; set; }
+        public string FilePath { get; set; }
+        public int StartOffset { get; set; }
+        public int EndOffset { get; set; }
 
         public string FullName
         {
@@ -88,6 +95,21 @@ namespace LuaExpose.DirectParser
         public string Namespace { get; set; }
         public List<ParsedAttribute> Attributes { get; set; } = new List<ParsedAttribute>();
         public List<ParsedEnumValue> Values { get; set; } = new List<ParsedEnumValue>();
+        public string FilePath { get; set; }
+        public int StartOffset { get; set; }
+        public int EndOffset { get; set; }
+
+        public string FullName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}::{Name}";
+    }
+
+    public class ParsedTypedef
+    {
+        public string Name { get; set; }
+        public string Type { get; set; }
+        public string Namespace { get; set; }
+        public string FilePath { get; set; }
+        public int StartOffset { get; set; }
+        public int EndOffset { get; set; }
 
         public string FullName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}::{Name}";
     }
@@ -107,6 +129,9 @@ namespace LuaExpose.DirectParser
         public bool IsConst { get; set; }
         public string Namespace { get; set; }
         public ParsedClass ContainingClass { get; set; }
+        public string FilePath { get; set; }
+        public int StartOffset { get; set; }
+        public int EndOffset { get; set; }
 
         public string FullName
         {
@@ -123,6 +148,9 @@ namespace LuaExpose.DirectParser
     {
         public string Name { get; set; }
         public Dictionary<string, string> Arguments { get; set; } = new Dictionary<string, string>();
+        public int StartOffset { get; set; }
+        public int EndOffset { get; set; }
+        public string FilePath { get; set; }
 
         public bool HasArgument(string key) => Arguments.ContainsKey(key);
         public string GetArgument(string key) => Arguments.TryGetValue(key, out var value) ? value : null;

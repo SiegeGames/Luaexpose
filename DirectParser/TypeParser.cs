@@ -118,8 +118,11 @@ namespace LuaExpose.DirectParser
                 result.Name = alias;
             }
 
-            // Normalize namespace separators
-            result.Name = result.Name.Replace("::", ".");
+            // Normalize namespace separators (but preserve Sol types)
+            if (!result.Name.StartsWith("sol::"))
+            {
+                result.Name = result.Name.Replace("::", ".");
+            }
 
             return result;
         }

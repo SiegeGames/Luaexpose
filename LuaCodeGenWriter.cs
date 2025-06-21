@@ -174,12 +174,16 @@ namespace LuaExpose
             if (File.Exists(p + "pp"))
                 p += "pp";
             var y = p.Substring(s);
-
-            return $@"#include ""{y.Remove(0, 6).Replace('\\', '/')}""";
+            
+            // Remove "siege/" prefix (6 characters) to get the relative path
+            var relativePath = y.Remove(0, 6).Replace('\\', '/');
+            
+            return $@"#include ""{relativePath}""";
         }
 
         public string GenerateUserType(LuaUserType lu, CppClass cpp, ref List<string> extraIncludes)
         {
+            Console.WriteLine($"[LuaCodeGen] GenerateUserType called for class {cpp.Name}");
             void WalkTypeTreeForBase(string baseType, ICppDeclarationContainer ns, ref List<CppClass> list)
             {                
                 foreach (var c in ns.Classes)
@@ -274,13 +278,56 @@ namespace LuaExpose
                 currentOutput.Append($"auto {usertype} = state.new_usertype<{typeList[i]}>(\"{typeList[i]}\"");
                 var constructors = cpp.Constructors.Where(x => x.IsConstructor());
                 var factories = cpp.Functions.Where(x => x.IsConstructor() && x.StorageQualifier == CppStorageQualifier.Static);
+                
+                // Debug output
+                Console.WriteLine($"[CodeGen] Class {typeList[i]}:");
+                Console.WriteLine($"  - Has LUA_USERTYPE: {hasCS.Any()}");
+                Console.WriteLine($"  - Has LUA_USERTYPE_NO_CTOR: {noConstructor.Any()}");
+                Console.WriteLine($"  - Constructors count: {constructors.Count()}");
+                if (constructors.Any())
+                {
+                    foreach (var ctor in constructors)
+                    {
+                        Console.WriteLine($"    * Constructor: {ctor.Name} ({string.Join(", ", ctor.Parameters.Select(p => p.Type.GetDisplayName()))})");
+                    }
+                }
+                Console.WriteLine($"  - Factories count: {factories.Count()}");
+                if (factories.Any())
+                {
+                    foreach (var factory in factories)
+                    {
+                        Console.WriteLine($"    * Factory: {factory.Name} ({string.Join(", ", factory.Parameters.Select(p => p.Type.GetDisplayName()))}) -> {factory.ReturnType?.GetDisplayName()}");
+                    }
+                }
 
                 // so if we don't have a constructor then we should make it happen
                 if (noConstructor.Any())
                 {
                     functionStrings.Add($"sol::no_constructor\n            ");
                 }
+                // Check for real constructors first (before factories)
+                else if (hasCS.Any() && constructors.Any())
+                {
+                    StringBuilder constructorsOutput = new StringBuilder();
 
+                    // we have a constructor 
+                    constructorsOutput.Append($"sol::constructors<");
+
+                    for (int j = 0; j < constructors.Count(); j++)
+                    {
+                        var of = constructors.ElementAt(j);
+                        var paramList = string.Join(',', of.Parameters.Select(x => x.Type.ConvertToSiegeType()));
+                        constructorsOutput.Append($"{typeList[i]}({paramList})");
+
+                        if (j != constructors.Count() - 1)
+                            constructorsOutput.Append(",");
+                    }
+
+                    constructorsOutput.Append($">()\n            ");
+                    functionStrings.Add(constructorsOutput.ToString());
+
+                }
+                // If no real constructors, check for factories
                 else if (factories.Any())
                 {
                     StringBuilder factoriesOutput = new StringBuilder();
@@ -313,11 +360,12 @@ namespace LuaExpose
                     }
                     functionStrings.Add(factoriesOutput.ToString());
                 }
-                // we have a constructor set for functions
-                else if (hasCS.Any() && constructors.Any())
+
+                // Skip template constructor handling for specialized classes
+                // The specialized classes created by DirectParser already have proper constructors
+                if (isTemplated.Any() && constructors.Any() && typeList.Count == 1)
                 {
                     StringBuilder constructorsOutput = new StringBuilder();
-
                     // we have a constructor 
                     constructorsOutput.Append($"sol::constructors<");
 
@@ -325,6 +373,7 @@ namespace LuaExpose
                     {
                         var of = constructors.ElementAt(j);
                         var paramList = string.Join(',', of.Parameters.Select(x => x.Type.ConvertToSiegeType()));
+
                         constructorsOutput.Append($"{typeList[i]}({paramList})");
 
                         if (j != constructors.Count() - 1)
@@ -336,40 +385,17 @@ namespace LuaExpose
 
                 }
 
-                // These templated functions are stupid
-                if (isTemplated.Any() && constructors.Any())
+                // For component-based systems, we should add base classes if they exist
+                // and the base class name indicates it should be exposed (e.g., "Component")
+                var shouldAddBaseData = cpp.BaseTypes.Any(x => 
                 {
-                    StringBuilder constructorsOutput = new StringBuilder();
-                    // we have a constructor 
-                    constructorsOutput.Append($"sol::constructors<");
+                    var baseClass = x.Type as CppClass;
+                    if (baseClass == null) return false;
+                    
+                    // Check if base class has LUA attributes OR if it's a known base class like "Component"
+                    return baseClass.IsClassTwo() || baseClass.Name == "Component";
+                });
 
-                    var cccc = compiledCode.FindByName<CppTypedef>(rootNamespace, typeList[i]);
-
-                    for (int j = 0; j < constructors.Count(); j++)
-                    {
-                        var of = constructors.ElementAt(j);
-                        var paramList = string.Join(',', of.Parameters.Select(x => x.GetRealParamValue()));
-
-                        // we found a type and we need to make shit happen
-                        if (cccc != null && !string.IsNullOrEmpty(paramList) && cccc.GetCanonicalType() is CppClass cxz)
-                        {
-                            var t_type = cxz.TemplateParameters.Count() > 0 ? cxz.TemplateParameters[0].GetDisplayName() : "";
-                           // var t_type = cxz.GetDisplayName().Split('<', '>')[1].Split(',')[0];
-                            paramList = paramList.Replace("T", t_type);
-                        }
-
-                        constructorsOutput.Append($"{typeList[i]}({paramList})");
-
-                        if (j != constructors.Count() - 1)
-                            constructorsOutput.Append(",");
-                    }
-
-                    constructorsOutput.Append($">()\n            ");
-                    functionStrings.Add(constructorsOutput.ToString());
-
-                }
-
-                var shouldAddBaseData = cpp.BaseTypes.Any(x => (x.Type as CppClass).IsClassTwo());
 
                 // add some base types
                 if (shouldAddBaseData)
@@ -418,6 +444,18 @@ namespace LuaExpose
                 // This will be a merged list of functions from the base and the current class
                 List<CppFunction> functionList = new List<CppFunction>();
                 functionList.AddRange(cpp.Functions.Where(z => z.IsExposedFunc()));
+                
+                Console.WriteLine($"[LuaCodeGen] Class {cpp.Name} has {cpp.Functions.Count} total functions, {functionList.Count} exposed");
+                
+                // Debug: Show all functions for Component-derived classes
+                if (cpp.BaseTypes.Any(bt => bt.Type?.GetDisplayName() == "Component"))
+                {
+                    Console.WriteLine($"[LuaCodeGen] DEBUG: All functions in {cpp.Name}:");
+                    foreach (var func in cpp.Functions)
+                    {
+                        Console.WriteLine($"  - {func.Name} (IsExposedFunc: {func.IsExposedFunc()}, Attributes: {string.Join(", ", func.Attributes?.Select(a => a.Name) ?? new string[0])})");
+                    }
+                }
 
                 if (shouldAddBaseData)
                 {
@@ -513,7 +551,11 @@ namespace LuaExpose
                     // so we need to parse the attributes of these functions
                     // we should add commas in here because we can! 
                     var attrParams = item.Attributes[0].Arguments.Split(',');
-
+                    // trim the arguements 
+                    for (int j = 0; j < attrParams.Length; j++)
+                    {
+                        attrParams[j] = attrParams[j].Trim();
+                    }
                     if (attrParams.Length == 2 && attrParams[1] == "...")
                     {
                         // this is the case where we have the ...
@@ -585,6 +627,8 @@ namespace LuaExpose
 
                 List<CppField> fieldList = new List<CppField>();
                 fieldList.AddRange(cpp.Fields.Where(z => (z.IsNormalVar() || z.IsReadOnly() || z.IsOptionalVar())));
+                
+                Console.WriteLine($"[LuaCodeGen] Class {cpp.Name} has {cpp.Fields.Count} total fields, {fieldList.Count} exposed");
                 // we need to walk the base data for any possible vars 
                 if (shouldAddBaseData)
                 {

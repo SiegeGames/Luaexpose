@@ -135,8 +135,36 @@ namespace LuaExpose
             }
         }
 
+        private HashSet<string> _processedNamespaces = new HashSet<string>();
+        
         public void ParseNamespace(CppNamespace inElement)
         {
+            ParseNamespace(inElement, new HashSet<string>());
+        }
+        
+        private void ParseNamespace(CppNamespace inElement, HashSet<string> visitedNamespaces)
+        {
+            // Create a unique key for this namespace
+            var namespaceKey = $"{inElement.Name}@{inElement.GetHashCode()}";
+            
+            // Check for circular references
+            if (visitedNamespaces.Contains(namespaceKey))
+            {
+                Console.WriteLine($"[CodeGenWriter] WARNING: Circular reference detected for namespace '{inElement.Name}', skipping to prevent infinite loop");
+                return;
+            }
+            
+            // Check if we've already fully processed this namespace
+            if (_processedNamespaces.Contains(namespaceKey))
+            {
+                Console.WriteLine($"[CodeGenWriter] Namespace '{inElement.Name}' already processed, skipping");
+                return;
+            }
+            
+            visitedNamespaces.Add(namespaceKey);
+            
+            //Console.WriteLine($"[CodeGenWriter] Processing namespace '{inElement.Name}' with {inElement.Attributes.Count} attributes");
+            
             // we have found a NameSpace that has been marked with an attribute
             if (inElement.Attributes.Count != 0)
             {
@@ -144,6 +172,14 @@ namespace LuaExpose
                 {
                     if (a.Name == "LUA_USERTYPE_NAMESPACE")
                     {
+                        //Console.WriteLine($"[CodeGenWriter] Found LUA_USERTYPE_NAMESPACE for '{inElement.Name}' in file: {a.Span.Start.File ?? "NULL"}");
+                        
+                        if (string.IsNullOrEmpty(a.Span.Start.File))
+                        {
+                            Console.WriteLine($"[CodeGenWriter] ERROR: LUA_USERTYPE_NAMESPACE attribute has no file span!");
+                            continue;
+                        }
+                        
                         var filePath = GetPathFile(a.Span.Start.File);
 
                         if (!filePath.userTypes.ContainsKey(inElement.Name))
@@ -152,6 +188,7 @@ namespace LuaExpose
                             x.OriginalElement = inElement;
                             x.OriginLocation = filePath.path;
                             filePath.userTypes[inElement.Name] = x;
+                            //Console.WriteLine($"[CodeGenWriter] Added namespace '{inElement.Name}' to file '{filePath.path}'");
                         }
                     }
                 }
@@ -159,7 +196,7 @@ namespace LuaExpose
 
             foreach (var ns in inElement.Namespaces)
             {
-                ParseNamespace(ns);
+                ParseNamespace(ns, new HashSet<string>(visitedNamespaces));
             }
 
             foreach (var c in inElement.Classes)
@@ -171,6 +208,9 @@ namespace LuaExpose
             {
                 ParseEnums(f);
             }
+            
+            // Mark this namespace as fully processed
+            _processedNamespaces.Add(namespaceKey);
         }
         protected void WriteFileContent(string content, string newPath)
         {

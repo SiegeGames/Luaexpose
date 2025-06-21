@@ -91,10 +91,15 @@ namespace LuaExpose
         }
         public static bool IsClass(this CppClass input, LuaUserType a)
         {
-            return input.Attributes.Any(x => (x.Name == "LUA_USERTYPE" || x.Name == "LUA_USERTYPE_NO_CTOR" || x.Name == "LUA_USERTYPE_TEMPLATE") && x.Span.Start.File == a.OriginLocation);
+          if (input == null)
+            return false;
+
+          return input.Attributes.Any(x => (x.Name == "LUA_USERTYPE" || x.Name == "LUA_USERTYPE_NO_CTOR" || x.Name == "LUA_USERTYPE_TEMPLATE") && x.Span.Start.File == a.OriginLocation);
         }
         public static bool IsClassTwo(this CppClass input)
         {
+            if (input == null)
+              return false;
             return input.Attributes.Any(x => (x.Name == "LUA_USERTYPE" || x.Name == "LUA_USERTYPE_NO_CTOR" || x.Name == "LUA_USERTYPE_TEMPLATE"));
         }
         public static List<CppFunction> GetNormalFunctions(this LuaUserType input)
@@ -165,6 +170,19 @@ namespace LuaExpose
             }
 
         }
+        
+        public static CppType GetFinalType(this CppType input)
+        {
+            switch (input.TypeKind)
+            {
+                case CppTypeKind.Qualified:
+                    return (input as CppTypeWithElementType).ElementType.GetFinalType();
+                case CppTypeKind.Typedef:
+                    return (input as CppTypedef).ElementType.GetFinalType();
+                default:
+                    return input;
+            }
+        }
 
         public static string ConvertToSiegeType(this CppType input, string templatedClassName = "")
         {
@@ -202,10 +220,53 @@ namespace LuaExpose
             {
                 return x.Replace("Rect<T, U>", templatedClassName);
             }
-            if (x.Contains("shared_ptr") && input.TypeKind == CppTypeKind.StructOrClass)
+            if (x.Contains("shared_ptr"))
             {
-                CppClass inputClass = input as CppClass;
-                return $"std::shared_ptr<{inputClass.TemplateParameters[0].ConvertToSiegeType(templatedClassName)}>";
+                // Handle different ways shared_ptr can be represented
+                switch (input.TypeKind)
+                {
+                    case CppTypeKind.StructOrClass:
+                        var inputClass = input as CppClass;
+                        if (inputClass != null && inputClass.TemplateParameters.Count > 0)
+                        {
+                            return $"std::shared_ptr<{inputClass.TemplateParameters[0].ConvertToSiegeType(templatedClassName)}>";
+                        }
+                        break;
+                        
+                    case CppTypeKind.Typedef:
+                        var typedef = input as CppTypedef;
+                        if (typedef?.ElementType?.TypeKind == CppTypeKind.StructOrClass)
+                        {
+                            var templatedClass = typedef.ElementType as CppClass;
+                            if (templatedClass != null && templatedClass.TemplateParameters.Count > 0)
+                            {
+                                return $"std::shared_ptr<{templatedClass.TemplateParameters[0].ConvertToSiegeType(templatedClassName)}>";
+                            }
+                        }
+                        break;
+                        
+                    case CppTypeKind.Unexposed:
+                        var unexposed = input as CppUnexposedType;
+                        if (unexposed != null && unexposed.TemplateParameters.Count > 0)
+                        {
+                            return $"std::shared_ptr<{unexposed.TemplateParameters[0].ConvertToSiegeType(templatedClassName)}>";
+                        }
+                        break;
+                        
+                    case CppTypeKind.Qualified:
+                    case CppTypeKind.Pointer:
+                    case CppTypeKind.Reference:
+                        // For qualified/pointer/reference types, check the element type
+                        var withElement = input as CppTypeWithElementType;
+                        if (withElement?.ElementType != null)
+                        {
+                            return withElement.ElementType.ConvertToSiegeType(templatedClassName);
+                        }
+                        break;
+                }
+                
+                // If we couldn't parse the template parameters, return the display name
+                return x;
             }
 
             return input.GetDisplayName();
@@ -308,20 +369,23 @@ namespace LuaExpose
                     {
                         return TypeMappings[typedef.Name];
                     }
-                    else if (typedef.ElementType.TypeKind == CppTypeKind.StructOrClass && (typedef.ElementType as CppClass).TemplateParameters.Count > 0)
+                    else if (typedef.ElementType.TypeKind == CppTypeKind.StructOrClass)
                     {
                         var templatedClass = typedef.ElementType as CppClass;
-                        if (templatedClass.Name == "vector" || templatedClass.Name == "array")
+                        if (templatedClass != null && templatedClass.TemplateParameters.Count > 0)
                         {
-                            string templatedType = templatedClass.TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
-                            if (source == TypeScriptSourceType.Parameter)
-                                return $"ArrayList<{templatedType}> | Array<{templatedType}>";
-                            else
-                                return $"ArrayList<{templatedType}>";
-                        }
-                        else if (templatedClass.Name == "shared_ptr")
-                        {
-                            return templatedClass.TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
+                            if (templatedClass.Name == "vector" || templatedClass.Name == "array")
+                            {
+                                string templatedType = templatedClass.TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
+                                if (source == TypeScriptSourceType.Parameter)
+                                    return $"ArrayList<{templatedType}> | Array<{templatedType}>";
+                                else
+                                    return $"ArrayList<{templatedType}>";
+                            }
+                            else if (templatedClass.Name == "shared_ptr")
+                            {
+                                return templatedClass.TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
+                            }
                         }
                     }
                     return typedef.Name;
@@ -332,21 +396,31 @@ namespace LuaExpose
                         {
                             return TypeMappings[name];
                         }
-                        else if (name == "Vec2" && ((input as CppClass).TemplateParameters[0] as CppPrimitiveType).Kind == CppPrimitiveKind.Int)
+                        else if (name == "Vec2" && (input as CppClass).TemplateParameters.Count > 0)
                         {
-                            return "PixelVector";
+                            var templateParam = (input as CppClass).TemplateParameters[0].GetFinalType();
+                            if (templateParam is CppPrimitiveType primitiveType)
+                            {
+                                if (primitiveType.Kind == CppPrimitiveKind.Int)
+                                    return "PixelVector";
+                                else if (primitiveType.Kind == CppPrimitiveKind.Float)
+                                    return "Vector";
+                            }
+                            // Fall back to generic Vec2 if template parameter is not recognized
+                            return "Vec2";
                         }
-                        else if (name == "Vec2" && ((input as CppClass).TemplateParameters[0] as CppPrimitiveType).Kind == CppPrimitiveKind.Float)
+                        else if (name == "Rectangle" && (input as CppClass).TemplateParameters.Count > 0)
                         {
-                            return "Vector";
-                        }
-                        else if (name == "Rectangle" && ((input as CppClass).TemplateParameters[0] as CppPrimitiveType).Kind == CppPrimitiveKind.Int)
-                        {
-                            return "PixelRect";
-                        }
-                        else if (name == "Rectangle" && ((input as CppClass).TemplateParameters[0] as CppPrimitiveType).Kind == CppPrimitiveKind.Float)
-                        {
-                            return "Rect";
+                            var templateParam = (input as CppClass).TemplateParameters[0].GetFinalType();
+                            if (templateParam is CppPrimitiveType primitiveType)
+                            {
+                                if (primitiveType.Kind == CppPrimitiveKind.Int)
+                                    return "PixelRect";
+                                else if (primitiveType.Kind == CppPrimitiveKind.Float)
+                                    return "Rect";
+                            }
+                            // Fall back to generic Rectangle if template parameter is not recognized
+                            return "Rectangle";
                         }
                         else if (name == "HashedString" && source == TypeScriptSourceType.Parameter)
                         {
@@ -355,19 +429,34 @@ namespace LuaExpose
 
                         else if (name == "vector" || name == "array")
                         {
-                            string templatedType = (input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
-                            if (source == TypeScriptSourceType.Parameter)
-                                return $"ArrayList<{templatedType}> | Array<{templatedType}>";
-                            else
-                                return $"ArrayList<{templatedType}>";
+                            if ((input as CppClass).TemplateParameters.Count > 0)
+                            {
+                                string templatedType = (input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
+                                if (source == TypeScriptSourceType.Parameter)
+                                    return $"ArrayList<{templatedType}> | Array<{templatedType}>";
+                                else
+                                    return $"ArrayList<{templatedType}>";
+                            }
+                            // Fall back to untyped array if no template parameters
+                            return "any[]";
                         }
                         else if (name == "shared_ptr")
                         {
-                            return (input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
+                            if ((input as CppClass).TemplateParameters.Count > 0)
+                            {
+                                return (input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
+                            }
+                            // Fall back to any if no template parameters
+                            return "any";
                         }
                         else if (name == "optional")
                         {
-                            return (input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(source, specialization) + " | undefined";
+                            if ((input as CppClass).TemplateParameters.Count > 0)
+                            {
+                                return (input as CppClass).TemplateParameters[0].ConvertToTypeScriptType(source, specialization) + " | undefined";
+                            }
+                            // Fall back to any | undefined if no template parameters
+                            return "any | undefined";
                         }
                         else
                         {
@@ -387,15 +476,25 @@ namespace LuaExpose
                         }
                         else if (name.StartsWith("optional"))
                         {
-                            name = ((input as CppUnexposedType).TemplateParameters[0] as CppUnexposedType).Name;
+                            var unexposedType = input as CppUnexposedType;
+                            if (unexposedType.TemplateParameters.Count > 0)
+                            {
+                                return unexposedType.TemplateParameters[0].ConvertToTypeScriptType(source, specialization) + " | undefined";
+                            }
+                            return "any | undefined";
                         }
                         else if (name.StartsWith("vector<") || name.StartsWith("array<"))
                         {
-                            string templatedType = (input as CppUnexposedType).TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
-                            if (source == TypeScriptSourceType.Parameter)
-                                return $"ArrayList<{templatedType}> | Array<{templatedType}>";
-                            else
-                                return $"ArrayList<{templatedType}>";
+                            var unexposedType = input as CppUnexposedType;
+                            if (unexposedType.TemplateParameters.Count > 0)
+                            {
+                                string templatedType = unexposedType.TemplateParameters[0].ConvertToTypeScriptType(source, specialization);
+                                if (source == TypeScriptSourceType.Parameter)
+                                    return $"ArrayList<{templatedType}> | Array<{templatedType}>";
+                                else
+                                    return $"ArrayList<{templatedType}>";
+                            }
+                            return "any[]";
                         }
 
                         int index = name.LastIndexOf("::");
@@ -461,6 +560,13 @@ namespace LuaExpose
         public static string GetRealParamValue(this CppParameter input)
         {
             StringBuilder x = new StringBuilder();
+            
+            // Handle null type (can happen with template parameters)
+            if (input.Type == null)
+            {
+                return input.Name ?? "";
+            }
+            
             if (input.Type is CppReferenceType rf)
             {
                 var rt = rf.ElementType;
@@ -472,11 +578,8 @@ namespace LuaExpose
                     }
                     else
                     {
-                        if (rt.TypeKind == CppTypeKind.Unexposed)
-                        {
-                            x.Append(rt.GetDisplayName());
-                            break;
-                        }
+                        x.Append(rt.GetDisplayName());
+                        break;
                     }
                 }
 
@@ -493,11 +596,8 @@ namespace LuaExpose
                     }
                     else
                     {
-                        if (rt.TypeKind == CppTypeKind.Unexposed)
-                        {
-                            x.Append(rt.GetDisplayName());
-                            break;
-                        }
+                        x.Append(rt.GetDisplayName());
+                        break;
                     }
                 }
             }
