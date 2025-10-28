@@ -113,6 +113,7 @@ namespace LuaExpose
             p.SystemIncludeFolders.Add($"{opts.libs}/fmod/include");
             p.SystemIncludeFolders.Add($"{opts.libs}/steam/include");
             p.SystemIncludeFolders.Add($"{opts.libs}/fmt/include");
+            p.SystemIncludeFolders.Add($"{opts.libs}/GameNetworkingSockets/include");
 
 
             if (OperatingSystem.IsMacOS())
