@@ -453,7 +453,15 @@ namespace LuaExpose
 
                 }
 
-                var shouldAddBaseData = cpp.BaseTypes.Any(x => (x.Type as CppClass).IsClassTwo());
+                var shouldAddBaseData = cpp.BaseTypes.Any(x =>
+                {
+                    var cls = x.Type as CppClass;
+                    if (cls == null && x.Type is CppTypedef td)
+                    {
+                        cls = td.ElementType as CppClass;
+                    }
+                    return cls != null && cls.IsClassTwo();
+                });
 
                 // add some base types
                 if (shouldAddBaseData)
@@ -465,6 +473,16 @@ namespace LuaExpose
                         foreach (var cv in inCpp.BaseTypes)
                         {
                             var sdf = cv.Type as CppClass;
+                            if (sdf == null && cv.Type is CppTypedef td)
+                            {
+                                sdf = td.ElementType as CppClass;
+                            }
+
+                            if (sdf == null)
+                            {
+                                continue;
+                            }
+
                             if (sdf.IsClassTwo())
                             {
                                 baseTypesL.Add(sdf.Name);
@@ -484,6 +502,16 @@ namespace LuaExpose
                     foreach (var bc in inClass.BaseTypes)
                     {
                         var c = bc.Type as CppClass;
+                        if (c == null && bc.Type is CppTypedef td)
+                        {
+                            c = td.ElementType as CppClass;
+                        }
+
+                        if (c == null)
+                        {
+                            continue;
+                        }
+
                         funcs.AddRange(c.Functions.Where(z => (z.IsExposedFunc()) && z.Flags.HasFlag(CppFunctionFlags.Virtual)));
 
                         WalkFunctionTree(c, funcs);

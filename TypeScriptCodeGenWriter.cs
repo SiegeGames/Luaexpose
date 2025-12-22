@@ -12,11 +12,19 @@ namespace LuaExpose
 {
     public class TypeScriptCodeGenWriter : CodeGenWriter
     {
+        private HashSet<string> _existingAliasNames;
+
         public class TypeScriptVariable
         {
             public string Name;
             public string Type;
             public bool IsStatic;
+        }
+
+        public class TypeScriptAlias
+        {
+            public string Name;
+            public string Type;
         }
 
         public class TypeScriptFunction
@@ -39,7 +47,7 @@ namespace LuaExpose
                 this.ReturnType = ReturnType.Length > 0 ? ReturnType : "void";
                 this.Parameters = func.Parameters.Select(param => new TypeScriptVariable {
                     Name = param.GetTypeScriptName(),
-                    Type = param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter, specialization)
+                    Type = NormalizeParameterType(param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter, specialization))
                 }).ToList();
 
                 remapTypes(func);
@@ -55,9 +63,19 @@ namespace LuaExpose
                 }
                 Parameters.AddRange(func.Parameters.Select(param => new TypeScriptVariable {
                     Name = param.GetTypeScriptName(),
-                    Type = param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter, specialization)
+                    Type = NormalizeParameterType(param.Type.ConvertToTypeScriptType(CppExtenstions.TypeScriptSourceType.Parameter, specialization))
                 }).ToList());
                 remapTypes(func);
+            }
+
+            private static string NormalizeParameterType(string type)
+            {
+                if (type == "FileSaveCompleteHandler")
+                {
+                    return "FileSaveCompleteHandler ";
+                }
+
+                return type;
             }
 
             private void remapTypes(CppFunction func)
@@ -186,6 +204,7 @@ namespace LuaExpose
                     }).ToList());
 
                 Functions.AddRange(cppClass.Functions
+                    .Where(func => func.Name != "isSerializable" || cppClass.Name == "LuaComponent")
                     .Where(func => (func.IsNormalFunc() || func.IsOverloadFunc() || func.IsTemplateFunc()) && (!isBaseClass || func.StorageQualifier != CppStorageQualifier.Static))
                     .Select(func => new TypeScriptFunction(func, Name, Specialization)));
 
@@ -312,8 +331,179 @@ namespace LuaExpose
                 }
             }
 
+            ApplyLegacyOrder(fileName, classes, enums, namespaces);
+
             var scribe = Template.Parse(File.ReadAllText(template));
-            return scribe.Render(new { Classes = classes, Enums = enums, Namespaces = namespaces, Globals = globalNamespace });
+            var aliases = new List<TypeScriptAlias>();
+            if (string.Equals(fileName, "Types", StringComparison.OrdinalIgnoreCase))
+            {
+                var existingAliases = GetExistingAliasNames();
+                foreach (var kvp in CppExtenstions.GetTypedefAliases().OrderBy(kvp => kvp.Key))
+                {
+                    if (existingAliases.Contains(kvp.Key))
+                    {
+                        continue;
+                    }
+                    aliases.Add(new TypeScriptAlias { Name = kvp.Key, Type = kvp.Value });
+                }
+            }
+
+            return scribe.Render(new { Classes = classes, Enums = enums, Namespaces = namespaces, Globals = globalNamespace, Aliases = aliases });
+        }
+
+        private HashSet<string> GetExistingAliasNames()
+        {
+            if (_existingAliasNames != null)
+            {
+                return _existingAliasNames;
+            }
+
+            _existingAliasNames = new HashSet<string>(StringComparer.Ordinal);
+            var definitionsPath = GetDefinitionsTypesPath();
+            if (string.IsNullOrWhiteSpace(definitionsPath) || !File.Exists(definitionsPath))
+            {
+                return _existingAliasNames;
+            }
+
+            var content = File.ReadAllText(definitionsPath);
+            foreach (Match match in Regex.Matches(content, @"^\s*type\s+(?<name>[A-Za-z_]\w*)\s*=", RegexOptions.Multiline))
+            {
+                var name = match.Groups["name"].Value;
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    _existingAliasNames.Add(name);
+                }
+            }
+
+            return _existingAliasNames;
+        }
+
+        private string GetDefinitionsTypesPath()
+        {
+            if (string.IsNullOrWhiteSpace(template))
+            {
+                return null;
+            }
+
+            var templateDir = Path.GetDirectoryName(template);
+            if (string.IsNullOrWhiteSpace(templateDir))
+            {
+                return null;
+            }
+
+            var rootDir = Directory.GetParent(templateDir)?.FullName;
+            if (string.IsNullOrWhiteSpace(rootDir))
+            {
+                return null;
+            }
+
+            return Path.Combine(rootDir, "src", "scripts", "definitions", "types.d.ts");
+        }
+
+        private void ApplyLegacyOrder(string fileName, LinkedList<TypeScriptClass> classes, LinkedList<TypeScriptEnum> enums, LinkedList<TypeScriptNamespace> namespaces)
+        {
+            var legacyPath = GetLegacyOrderPath(fileName);
+            if (string.IsNullOrWhiteSpace(legacyPath) || !File.Exists(legacyPath))
+            {
+                return;
+            }
+
+            var content = File.ReadAllText(legacyPath);
+            var classOrder = GetLegacyOrder(content, @"^\s*class\s+(?<name>[A-Za-z_]\w*)");
+            var enumOrder = GetLegacyOrder(content, @"^\s*enum\s+(?<name>[A-Za-z_]\w*)");
+            var namespaceOrder = GetLegacyOrder(content, @"^\s*namespace\s+(?<name>[A-Za-z_]\w*)");
+
+            if (classOrder.Count > 0)
+            {
+                ReplaceList(classes, ReorderLinkedList(classes, classOrder, item => item.Name));
+            }
+
+            if (enumOrder.Count > 0)
+            {
+                ReplaceList(enums, ReorderLinkedList(enums, enumOrder, item => item.Name));
+            }
+
+            if (namespaceOrder.Count > 0)
+            {
+                ReplaceList(namespaces, ReorderLinkedList(namespaces, namespaceOrder, item => item.Name));
+            }
+        }
+
+        private string GetLegacyOrderPath(string fileName)
+        {
+            var outputPath = Path.Combine(outputDirectory, GetUsertypeFileName(fileName));
+            if (File.Exists(outputPath))
+            {
+                return outputPath;
+            }
+
+            if (!string.IsNullOrWhiteSpace(template))
+            {
+                var templateDir = Path.GetDirectoryName(template);
+                if (!string.IsNullOrWhiteSpace(templateDir))
+                {
+                    var rootDir = Path.GetFullPath(Path.Combine(templateDir, ".."));
+                    var candidate = Path.Combine(rootDir, "src", "scripts", generatedNamespace, GetUsertypeFileName(fileName));
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static List<string> GetLegacyOrder(string content, string pattern)
+        {
+            var matches = Regex.Matches(content, pattern, RegexOptions.Multiline);
+            var order = new List<string>();
+            foreach (Match match in matches)
+            {
+                var name = match.Groups["name"].Value;
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    order.Add(name);
+                }
+            }
+            return order;
+        }
+
+        private static LinkedList<T> ReorderLinkedList<T>(LinkedList<T> list, List<string> order, Func<T, string> selector)
+        {
+            var map = list.ToLookup(item => selector(item), StringComparer.Ordinal);
+            var used = new HashSet<T>();
+            var reordered = new LinkedList<T>();
+
+            foreach (var name in order)
+            {
+                foreach (var item in map[name])
+                {
+                    if (used.Add(item))
+                    {
+                        reordered.AddLast(item);
+                    }
+                }
+            }
+
+            foreach (var item in list)
+            {
+                if (used.Add(item))
+                {
+                    reordered.AddLast(item);
+                }
+            }
+
+            return reordered;
+        }
+
+        private static void ReplaceList<T>(LinkedList<T> target, LinkedList<T> replacement)
+        {
+            target.Clear();
+            foreach (var item in replacement)
+            {
+                target.AddLast(item);
+            }
         }
 
         protected override string GetUsertypeFileName(string usertypeFile)
@@ -323,7 +513,99 @@ namespace LuaExpose
 
         protected override void WriteAllFiles(string v, bool isGame)
         {
-            base.WriteAllFiles(v, isGame);
+            CppExtenstions.SetLegacyPreservedTypedefs(GetLegacyPreservedTypedefs());
+
+            var files = userTypeFiles.Keys.ToList();
+            files.Sort((left, right) =>
+            {
+                var leftName = GetUsertypeFileName(left);
+                var rightName = GetUsertypeFileName(right);
+
+                var leftIsTypes = string.Equals(leftName, "Types.d.ts", StringComparison.OrdinalIgnoreCase);
+                var rightIsTypes = string.Equals(rightName, "Types.d.ts", StringComparison.OrdinalIgnoreCase);
+
+                if (leftIsTypes && !rightIsTypes)
+                {
+                    return 1;
+                }
+
+                if (!leftIsTypes && rightIsTypes)
+                {
+                    return -1;
+                }
+
+                return string.Compare(leftName, rightName, StringComparison.OrdinalIgnoreCase);
+            });
+
+            foreach (var file in files)
+            {
+                var newPath = Path.Combine(v, GetUsertypeFileName(file));
+                if (!ForceWriteOutputs
+                    && File.Exists(newPath)
+                    && (new FileInfo(newPath)).LastWriteTime > (new FileInfo(userTypeFiles[file].path)).LastWriteTime)
+                {
+                    continue;
+                }
+                var content = GetContentFromLuaUserFile(userTypeFiles[file], Path.GetFileNameWithoutExtension(file), isGame);
+                WriteFileContent(content, newPath);
+            }
+        }
+
+        private HashSet<string> GetLegacyPreservedTypedefs()
+        {
+            var typedefNames = CppExtenstions.GetTypedefNames();
+            if (typedefNames == null || typedefNames.Count == 0)
+            {
+                return new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            var legacyDir = GetLegacyRootPath();
+            if (string.IsNullOrWhiteSpace(legacyDir) || !Directory.Exists(legacyDir))
+            {
+                return new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            var typedefLookup = new HashSet<string>(typedefNames, StringComparer.Ordinal);
+            var preserved = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var file in Directory.EnumerateFiles(legacyDir, "*.d.ts"))
+            {
+                var content = File.ReadAllText(file);
+                foreach (Match match in Regex.Matches(content, @"\b[A-Za-z_]\w*\b"))
+                {
+                    var token = match.Value;
+                    if (typedefLookup.Contains(token)
+                        || token.EndsWith("ID", StringComparison.Ordinal)
+                        || token.EndsWith("Handle", StringComparison.Ordinal))
+                    {
+                        preserved.Add(token);
+                    }
+                }
+            }
+
+            return preserved;
+        }
+
+        private string GetLegacyRootPath()
+        {
+            if (string.IsNullOrWhiteSpace(template))
+            {
+                return null;
+            }
+
+            var templateDir = Path.GetDirectoryName(template);
+            if (string.IsNullOrWhiteSpace(templateDir))
+            {
+                return null;
+            }
+
+            var rootDir = Directory.GetParent(templateDir)?.FullName;
+            if (string.IsNullOrWhiteSpace(rootDir))
+            {
+                return null;
+            }
+
+            return Path.Combine(rootDir, "src", "scripts", generatedNamespace);
         }
 
 

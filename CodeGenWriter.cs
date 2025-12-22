@@ -53,12 +53,22 @@ namespace LuaExpose
         protected string userTypeFilePattern;
         protected List<string> preservedFiles = new List<string>();
         protected string outputDirectory;
+        public static bool ForceWriteOutputs { get; set; }
+        public static bool DisableCleanup { get; set; }
+        public static bool DiagnosticsEnabled { get; set; }
 
         public CodeGenWriter(CppCompilation compilation, string scrib, string rootNS)
         {
             template = scrib;
             generatedNamespace = rootNS;
-            rootNamespace = compilation.Namespaces.Where(x => x.Name.Contains(rootNS)).FirstOrDefault();
+            rootNamespace = compilation.Namespaces
+                .FirstOrDefault(x => string.Equals(x.Name, rootNS, StringComparison.Ordinal));
+
+            if (rootNamespace == null)
+            {
+                rootNamespace = compilation.Namespaces
+                    .FirstOrDefault(x => x.Name != null && x.Name.Contains(rootNS, StringComparison.Ordinal));
+            }
             compiledCode = compilation;
             userTypeFiles = new Dictionary<string, LuaUserTypeFile>();
         }
@@ -199,7 +209,9 @@ namespace LuaExpose
             foreach (var f in userTypeFiles)
             {
                 var newPath = Path.Combine(v, GetUsertypeFileName(f.Key));
-                if (File.Exists(newPath) && (new FileInfo(newPath)).LastWriteTime > (new FileInfo(f.Value.path)).LastWriteTime)
+                if (!ForceWriteOutputs
+                    && File.Exists(newPath)
+                    && (new FileInfo(newPath)).LastWriteTime > (new FileInfo(f.Value.path)).LastWriteTime)
                 {
                     continue;
                 }
@@ -216,9 +228,29 @@ namespace LuaExpose
             outputDirectory = outLocation;
 
             CppExtenstions.InitializePrimitiveAliases(compiledCode);
+            CppExtenstions.InitializeEnumNames(compiledCode);
+            CppExtenstions.InitializePreservedTypedefs(compiledCode);
 
             ParseNamespace(rootNamespace);
             WriteAllFiles(outLocation, isGame);
+
+            if (DisableCleanup)
+            {
+                Console.WriteLine("Skipping cleanup of generated files (disabled).");
+                return;
+            }
+
+            if (DiagnosticsEnabled)
+            {
+                var userTypeCount = userTypeFiles.Values.Sum(v => v.userTypes.Count);
+                Console.WriteLine($"Discovered {userTypeCount} usertypes across {userTypeFiles.Count} output files.");
+            }
+
+            if (userTypeFiles.Count == 0)
+            {
+                Console.WriteLine("No usertypes discovered; skipping cleanup to avoid deleting outputs.");
+                return;
+            }
 
             // Cleanup old files that either were deleted or on another branch
             var generatedFiles = userTypeFiles.Keys.Select(f => Path.Combine(outLocation, GetUsertypeFileName(f)));

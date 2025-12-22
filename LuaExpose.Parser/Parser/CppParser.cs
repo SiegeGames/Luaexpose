@@ -25,6 +25,7 @@ namespace LuaExpose.Parser
         public bool ParseMacros { get; set; } = false;
         public bool ParseInParallel { get; set; } = true;
         public bool FilterFilesWithoutLuaAttributes { get; set; } = true;
+        public bool EnableDiagnostics { get; set; } = false;
         public int MaxDegreeOfParallelism { get; set; } = Environment.ProcessorCount;
         public List<string> Defines { get; } = new List<string>();
         public List<string> IncludeFolders { get; } = new List<string>();
@@ -55,6 +56,13 @@ namespace LuaExpose.Parser
             options ??= new CppParserOptions();
 
             var parseResults = new ConcurrentBag<CppCompilation>();
+            int filteredCount = 0;
+            int parsedCount = 0;
+            int preprocessFailedCount = 0;
+            int preprocessStrippedLuaCount = 0;
+            int preprocessFallbackCount = 0;
+            int preprocessSkippedForLuaCount = 0;
+            var filteredSamples = new ConcurrentQueue<string>();
             var parallelOptions = new ParallelOptions
             {
                 MaxDegreeOfParallelism = options.MaxDegreeOfParallelism <= 0 ? Environment.ProcessorCount : options.MaxDegreeOfParallelism
@@ -74,14 +82,22 @@ namespace LuaExpose.Parser
 
                     string rawSource = File.ReadAllText(file);
 
-                    if (options.FilterFilesWithoutLuaAttributes && !ContainsLuaMarkers(rawSource))
+                    var hasLuaMarkers = ContainsLuaMarkers(rawSource);
+
+                    if (options.FilterFilesWithoutLuaAttributes && !hasLuaMarkers)
                     {
+                        System.Threading.Interlocked.Increment(ref filteredCount);
+                        if (options.EnableDiagnostics && filteredSamples.Count < 25)
+                        {
+                            filteredSamples.Enqueue(file);
+                        }
                         return;
                     }
 
                     string source;
+                    bool usedPreprocessed = false;
 
-                    if (options.EnablePreprocessing)
+                    if (options.EnablePreprocessing && !hasLuaMarkers)
                     {
                         var ppOptions = new PreprocessorOptions
                         {
@@ -100,20 +116,51 @@ namespace LuaExpose.Parser
                         var ppResult = CppPreprocessor.PreprocessFile(file, ppOptions);
                         if (!ppResult.Success)
                         {
+                            System.Threading.Interlocked.Increment(ref preprocessFailedCount);
                             localCompilation.Diagnostics.Warning($"Preprocessing failed for {file}, parsing raw source. Error: {ppResult.ErrorOutput}");
                             source = ExpandSimpleMacros(rawSource);
                         }
                         else
                         {
-                            source = ppResult.Output;
+                            if (ContainsLuaMarkers(rawSource) && !ContainsLuaMarkers(ppResult.Output))
+                            {
+                                System.Threading.Interlocked.Increment(ref preprocessStrippedLuaCount);
+                                localCompilation.Diagnostics.Warning($"Preprocessing stripped LUA_ markers for {file}, parsing raw source.");
+                                source = ExpandSimpleMacros(rawSource);
+                            }
+                            else
+                            {
+                                source = ppResult.Output;
+                                usedPreprocessed = true;
+                            }
                         }
                     }
                     else
                     {
+                        if (options.EnablePreprocessing && hasLuaMarkers)
+                        {
+                            System.Threading.Interlocked.Increment(ref preprocessSkippedForLuaCount);
+                        }
                         source = ExpandSimpleMacros(rawSource);
                     }
 
                     ParseSource(source, file, localCompilation, options);
+                    System.Threading.Interlocked.Increment(ref parsedCount);
+
+                    if (usedPreprocessed && hasLuaMarkers)
+                    {
+                        var preprocessedCount = CountUsertypeAttributes(localCompilation);
+
+                        var rawCompilation = new CppCompilation();
+                        ParseSource(ExpandSimpleMacros(rawSource), file, rawCompilation, options);
+                        var rawCount = CountUsertypeAttributes(rawCompilation);
+
+                        if (rawCount > preprocessedCount)
+                        {
+                            System.Threading.Interlocked.Increment(ref preprocessFallbackCount);
+                            localCompilation = rawCompilation;
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -147,6 +194,16 @@ namespace LuaExpose.Parser
                 MergeCompilation(compilation, local);
             }
 
+            if (options.EnableDiagnostics)
+            {
+                Console.WriteLine($"Parser diagnostics: parsed {parsedCount}/{files.Count} files, filtered {filteredCount}, preprocess failures {preprocessFailedCount}, preprocessed LUA_ stripped {preprocessStrippedLuaCount}, fallback to raw {preprocessFallbackCount}, preprocess skipped for LUA_ {preprocessSkippedForLuaCount}.");
+                if (!filteredSamples.IsEmpty)
+                {
+                    var sampleList = filteredSamples.Take(10).ToList();
+                    Console.WriteLine($"Filtered samples (no LUA_ markers): {string.Join(", ", sampleList)}");
+                }
+            }
+
             ResolveTypes(compilation);
             return compilation;
         }
@@ -161,7 +218,8 @@ namespace LuaExpose.Parser
 
             string effectiveSource = source;
 
-            if (options.EnablePreprocessing)
+            var hasLuaMarkers = ContainsLuaMarkers(source);
+            if (options.EnablePreprocessing && !hasLuaMarkers)
             {
                 var ppOptions = new PreprocessorOptions
                 {
@@ -180,7 +238,15 @@ namespace LuaExpose.Parser
                 var ppResult = CppPreprocessor.PreprocessString(source, ppOptions, filename);
                 if (ppResult.Success)
                 {
-                    effectiveSource = ppResult.Output;
+                    if (hasLuaMarkers && !ContainsLuaMarkers(ppResult.Output))
+                    {
+                        compilation.Diagnostics.Warning($"Preprocessing stripped LUA_ markers for {filename}, parsing raw source.");
+                        effectiveSource = ExpandSimpleMacros(source);
+                    }
+                    else
+                    {
+                        effectiveSource = ppResult.Output;
+                    }
                 }
                 else
                 {
@@ -210,6 +276,145 @@ namespace LuaExpose.Parser
         {
             if (string.IsNullOrEmpty(source)) return false;
             return source.Contains("LUA_", StringComparison.Ordinal);
+        }
+
+        private static int CountUsertypeAttributes(CppCompilation compilation)
+        {
+            if (compilation == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            count += CountUsertypeAttributes(compilation.Attributes);
+
+            foreach (var field in compilation.Fields)
+            {
+                count += CountUsertypeAttributes(field.Attributes);
+            }
+
+            foreach (var func in compilation.Functions)
+            {
+                count += CountUsertypeAttributes(func.Attributes);
+            }
+
+            foreach (var en in compilation.Enums)
+            {
+                count += CountUsertypeAttributes(en);
+            }
+
+            foreach (var cls in compilation.Classes)
+            {
+                count += CountUsertypeAttributes(cls);
+            }
+
+            foreach (var ns in compilation.Namespaces)
+            {
+                count += CountUsertypeAttributes(ns);
+            }
+
+            return count;
+        }
+
+        private static int CountUsertypeAttributes(CppNamespace ns)
+        {
+            if (ns == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            count += CountUsertypeAttributes(ns.Attributes);
+
+            foreach (var field in ns.Fields)
+            {
+                count += CountUsertypeAttributes(field.Attributes);
+            }
+
+            foreach (var func in ns.Functions)
+            {
+                count += CountUsertypeAttributes(func.Attributes);
+            }
+
+            foreach (var en in ns.Enums)
+            {
+                count += CountUsertypeAttributes(en);
+            }
+
+            foreach (var cls in ns.Classes)
+            {
+                count += CountUsertypeAttributes(cls);
+            }
+
+            foreach (var nested in ns.Namespaces)
+            {
+                count += CountUsertypeAttributes(nested);
+            }
+
+            return count;
+        }
+
+        private static int CountUsertypeAttributes(CppClass cls)
+        {
+            if (cls == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            count += CountUsertypeAttributes(cls.Attributes);
+
+            foreach (var field in cls.Fields)
+            {
+                count += CountUsertypeAttributes(field.Attributes);
+            }
+
+            foreach (var func in cls.Functions)
+            {
+                count += CountUsertypeAttributes(func.Attributes);
+            }
+
+            foreach (var en in cls.Enums)
+            {
+                count += CountUsertypeAttributes(en);
+            }
+
+            foreach (var nested in cls.Classes)
+            {
+                count += CountUsertypeAttributes(nested);
+            }
+
+            return count;
+        }
+
+        private static int CountUsertypeAttributes(CppEnum en)
+        {
+            if (en == null)
+            {
+                return 0;
+            }
+
+            return CountUsertypeAttributes(en.Attributes);
+        }
+
+        private static int CountUsertypeAttributes(IEnumerable<CppAttribute> attributes)
+        {
+            if (attributes == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            foreach (var attr in attributes)
+            {
+                if (!string.IsNullOrWhiteSpace(attr?.Name)
+                    && attr.Name.StartsWith("LUA_USERTYPE", StringComparison.Ordinal))
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static void MergeCompilation(CppCompilation target, CppCompilation source)
@@ -665,6 +870,39 @@ namespace LuaExpose.Parser
     /// </summary>
     internal class CppParserImpl
     {
+        private static readonly HashSet<string> AttributeLikeIdentifiers = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "__declspec",
+            "__attribute__",
+            "alignas",
+            "_Alignas",
+            "__alignof",
+            "__alignof__",
+            "__cdecl",
+            "_cdecl",
+            "__stdcall",
+            "_stdcall",
+            "__fastcall",
+            "_fastcall",
+            "__thiscall",
+            "_thiscall",
+            "__vectorcall",
+            "_vectorcall",
+            "__ptr64",
+            "__ptr32",
+            "__unaligned",
+            "__restrict",
+            "__restrict__",
+            "restrict",
+            "__forceinline",
+            "__forceinline__",
+            "__inline",
+            "__inline__",
+            "_Nonnull",
+            "_Nullable",
+            "_Null_unspecified"
+        };
+
         private readonly List<Token> _tokens;
         private readonly CppCompilation _compilation;
         private readonly CppParserOptions _options;
@@ -755,22 +993,33 @@ namespace LuaExpose.Parser
         {
             var attributes = new List<CppAttribute>();
 
-            while (Check(TokenType.DoubleLeftBracket))
+            while (true)
             {
-                Advance(); // [[
-
-                while (!Check(TokenType.DoubleRightBracket) && !IsAtEnd())
+                if (Check(TokenType.DoubleLeftBracket))
                 {
-                    var attr = ParseSingleAttribute();
-                    if (attr != null) attributes.Add(attr);
+                    Advance(); // [[
 
-                    if (Check(TokenType.Comma))
+                    while (!Check(TokenType.DoubleRightBracket) && !IsAtEnd())
                     {
-                        Advance();
+                        var attr = ParseSingleAttribute();
+                        if (attr != null) attributes.Add(attr);
+
+                        if (Check(TokenType.Comma))
+                        {
+                            Advance();
+                        }
                     }
+
+                    Expect(TokenType.DoubleRightBracket); // ]]
+                    continue;
                 }
 
-                Expect(TokenType.DoubleRightBracket); // ]]
+                if (TrySkipAttributeLike())
+                {
+                    continue;
+                }
+
+                break;
             }
 
             return attributes;
@@ -926,6 +1175,11 @@ namespace LuaExpose.Parser
             while (Check(TokenType.Identifier) && (Current().Text == "final" || Current().Text == "sealed"))
             {
                 Advance();
+            }
+
+            while (TrySkipAttributeLike())
+            {
+                // Skip MSVC/GNU attribute-like tokens after class name.
             }
 
             var cppClass = new CppClass(name);
@@ -1353,6 +1607,11 @@ namespace LuaExpose.Parser
                 var paramType = ParseType();
                 if (paramType == null) break;
 
+                while (TrySkipAttributeLike())
+                {
+                    // Skip attributes between parameter type and name.
+                }
+
                 string paramName = "";
                 if (Check(TokenType.Identifier))
                 {
@@ -1397,6 +1656,11 @@ namespace LuaExpose.Parser
             if (Check(TokenType.Identifier))
             {
                 name = Advance().Text;
+            }
+
+            while (TrySkipAttributeLike())
+            {
+                // Skip attributes after enum name.
             }
 
             var cppEnum = new CppEnum(name);
@@ -1664,6 +1928,16 @@ namespace LuaExpose.Parser
                 return;
             }
 
+            while (TrySkipAttributeLike())
+            {
+                // Skip calling conventions or attributes between type and name.
+            }
+
+            while (TrySkipAttributeLike())
+            {
+                // Skip calling conventions or attributes between type and name.
+            }
+
             // Handle qualified member definitions parsed as a type name, e.g., Text::Text(...)
             if (Check(TokenType.LeftParen) && type is CppUnexposedType ut && ut.Name.Contains("::"))
             {
@@ -1763,16 +2037,27 @@ namespace LuaExpose.Parser
         {
             CppTypeQualifier? preQualifier = null;
 
-            // Leading const/volatile
-            if (Check(TokenType.Const))
+            // Leading const/volatile and attribute-like specifiers
+            while (true)
             {
-                preQualifier = CppTypeQualifier.Const;
-                Advance();
-            }
-            else if (Check(TokenType.Volatile))
-            {
-                preQualifier = CppTypeQualifier.Volatile;
-                Advance();
+                if (Check(TokenType.Const))
+                {
+                    preQualifier = CppTypeQualifier.Const;
+                    Advance();
+                }
+                else if (Check(TokenType.Volatile))
+                {
+                    preQualifier = CppTypeQualifier.Volatile;
+                    Advance();
+                }
+                else if (TrySkipAttributeLike())
+                {
+                    continue;
+                }
+                else
+                {
+                    break;
+                }
             }
 
             CppType baseType = null;
@@ -1852,6 +2137,10 @@ namespace LuaExpose.Parser
                     // Rvalue reference - represent as reference for simplicity
                     baseType = new CppReferenceType(baseType);
                 }
+                else if (TrySkipAttributeLike())
+                {
+                    continue;
+                }
                 else
                 {
                     break;
@@ -1859,6 +2148,27 @@ namespace LuaExpose.Parser
             }
 
             return baseType;
+        }
+
+        private bool TrySkipAttributeLike()
+        {
+            if (!Check(TokenType.Identifier)) return false;
+
+            var text = Current().Text;
+            if (!AttributeLikeIdentifiers.Contains(text)) return false;
+
+            Advance();
+
+            if (Check(TokenType.LeftParen))
+            {
+                SkipToClosingBracket(TokenType.LeftParen, TokenType.RightParen);
+            }
+            else if (Check(TokenType.LeftBracket))
+            {
+                SkipToClosingBracket(TokenType.LeftBracket, TokenType.RightBracket);
+            }
+
+            return true;
         }
 
         private CppType ParseIntegerType()

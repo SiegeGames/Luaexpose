@@ -63,6 +63,15 @@ namespace LuaExpose
 
             [Option("preprocess", Required = false, HelpText = "Enable macro preprocessing (requires clang/gcc/msvc in PATH)")]
             public bool EnablePreprocessing { get; set; }
+
+            [Option('f', "force", Required = false, HelpText = "Force overwrite generated outputs, ignoring timestamp checks")]
+            public bool Force { get; set; }
+
+            [Option("no-clean", Required = false, HelpText = "Skip deleting previously generated files")]
+            public bool NoClean { get; set; }
+
+            [Option("diagnostic", Required = false, HelpText = "Enable extra diagnostics for parsing and generation")]
+            public bool Diagnostic { get; set; }
         }
 
         static void Main(string[] args)
@@ -74,6 +83,9 @@ namespace LuaExpose
         static void RunOptions(Options opts)
         {
             Console.WriteLine("Running Code Gen");
+            CodeGenWriter.ForceWriteOutputs = opts.Force;
+            CodeGenWriter.DisableCleanup = opts.NoClean;
+            CodeGenWriter.DiagnosticsEnabled = opts.Diagnostic;
             var currentTime = 0L;
             var last_run = @"last_run.txt";
             if (opts.IsGame)
@@ -111,6 +123,7 @@ namespace LuaExpose
                 ParseAsCpp = true,
                 ParseMacros = true,
                 EnablePreprocessing = opts.EnablePreprocessing,
+                EnableDiagnostics = opts.Diagnostic,
                 CppStandard = "c++20"
             };
 
