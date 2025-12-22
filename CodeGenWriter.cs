@@ -52,6 +52,7 @@ namespace LuaExpose
         protected Dictionary<string, LuaUserTypeFile> userTypeFiles;
         protected string userTypeFilePattern;
         protected List<string> preservedFiles = new List<string>();
+        protected string outputDirectory;
 
         public CodeGenWriter(CppCompilation compilation, string scrib, string rootNS)
         {
@@ -174,9 +175,17 @@ namespace LuaExpose
         }
         protected void WriteFileContent(string content, string newPath)
         {
-            using (System.IO.StreamWriter file =
-                new System.IO.StreamWriter(newPath))
+            if (content == null)
             {
+                content = string.Empty;
+            }
+
+            // Normalize to CRLF for consistent Windows outputs.
+            content = content.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(newPath))
+            {
+                file.NewLine = "\r\n";
                 file.Write(content);
             }
         }
@@ -204,6 +213,9 @@ namespace LuaExpose
             Console.WriteLine($"Writing files to {outLocation}");
 
             Directory.CreateDirectory(outLocation);
+            outputDirectory = outLocation;
+
+            CppExtenstions.InitializePrimitiveAliases(compiledCode);
 
             ParseNamespace(rootNamespace);
             WriteAllFiles(outLocation, isGame);

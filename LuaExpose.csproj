@@ -13,6 +13,9 @@
     <Compile Remove="Ext\**" />
     <EmbeddedResource Remove="Ext\**" />
     <None Remove="Ext\**" />
+    <Compile Remove="LuaExpose.Parser\**" />
+    <EmbeddedResource Remove="LuaExpose.Parser\**" />
+    <None Remove="LuaExpose.Parser\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,7 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="Ext\CppAst\src\CppAst\CppAst.csproj" />
+    <ProjectReference Include="LuaExpose.Parser\LuaExpose.Parser.csproj" />
   </ItemGroup>
 
 </Project>

@@ -9,6 +9,37 @@ namespace LuaExpose
 {
     public static class CppExtenstions
     {
+        private static HashSet<string> _primitiveAliases = new HashSet<string>(StringComparer.Ordinal);
+
+        public static void InitializePrimitiveAliases(CppCompilation compilation)
+        {
+            if (compilation == null)
+            {
+                _primitiveAliases = new HashSet<string>(StringComparer.Ordinal);
+                return;
+            }
+
+            var typedefs = new List<CppTypedef>();
+            CollectTypedefs(compilation, typedefs);
+
+            var typedefMap = typedefs
+                .GroupBy(t => t.Name)
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+            var resolved = new Dictionary<string, bool>(StringComparer.Ordinal);
+            var aliases = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var name in typedefMap.Keys)
+            {
+                if (ResolveAliasToPrimitive(name, typedefMap, resolved, new HashSet<string>(StringComparer.Ordinal)))
+                {
+                    aliases.Add(name);
+                }
+            }
+
+            _primitiveAliases = aliases;
+        }
+
         public static string GetName(this ICppDeclaration input)
         {
             return (input as ICppMember).Name;
@@ -95,6 +126,7 @@ namespace LuaExpose
         }
         public static bool IsClassTwo(this CppClass input)
         {
+            if (input == null || input.Attributes == null) return false;
             return input.Attributes.Any(x => (x.Name == "LUA_USERTYPE" || x.Name == "LUA_USERTYPE_NO_CTOR" || x.Name == "LUA_USERTYPE_TEMPLATE"));
         }
         public static List<CppFunction> GetNormalFunctions(this LuaUserType input)
@@ -110,7 +142,26 @@ namespace LuaExpose
             if (input.OriginalElement is CppEnum)
                 return new List<CppEnum> { input.OriginalElement as CppEnum };
 
-            return (input.OriginalElement as ICppDeclarationContainer).Enums.Where(x => x.IsEnum() && x.SourceFile == input.OriginLocation).ToList();
+            var enums = (input.OriginalElement as ICppDeclarationContainer).Enums
+                .Where(x => x.IsEnum() && x.SourceFile == input.OriginLocation)
+                .ToList();
+
+            // Ensure deterministic enum ordering (prefer source order).
+            enums.Sort((a, b) =>
+            {
+                var fileCmp = string.Compare(a.Span.Start.File, b.Span.Start.File, StringComparison.OrdinalIgnoreCase);
+                if (fileCmp != 0) return fileCmp;
+
+                var lineCmp = a.Span.Start.Line.CompareTo(b.Span.Start.Line);
+                if (lineCmp != 0) return lineCmp;
+
+                var colCmp = a.Span.Start.Column.CompareTo(b.Span.Start.Column);
+                if (colCmp != 0) return colCmp;
+
+                return string.Compare(a.Name, b.Name, StringComparison.Ordinal);
+            });
+
+            return enums;
         }
         public static List<CppClass> GetClasses(this LuaUserType input)
         {
@@ -151,6 +202,12 @@ namespace LuaExpose
                     return (input as CppTypeWithElementType).ElementType.GetFinalTypeKind();
                 case CppTypeKind.Typedef:
                     return (input as CppTypedef).ElementType.GetFinalTypeKind();
+                case CppTypeKind.Unexposed:
+                    if (input is CppUnexposedType ut && IsPrimitiveAlias(ut.Name))
+                    {
+                        return CppTypeKind.Primitive;
+                    }
+                    return input.TypeKind;
                 case CppTypeKind.Primitive:
                 case CppTypeKind.Pointer:
                 case CppTypeKind.Reference:
@@ -158,12 +215,139 @@ namespace LuaExpose
                 case CppTypeKind.Function:
                 case CppTypeKind.Enum:
                 case CppTypeKind.TemplateParameterType:
-                case CppTypeKind.Unexposed:
                 case CppTypeKind.StructOrClass:
                 default:
                     return input.TypeKind;
             }
 
+        }
+
+        private static bool IsPrimitiveAlias(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return false;
+            }
+
+            if (_primitiveAliases.Contains(name))
+            {
+                return true;
+            }
+
+            switch (name)
+            {
+                case "int8":
+                case "uint8":
+                case "int16":
+                case "uint16":
+                case "int32":
+                case "uint32":
+                case "int64":
+                case "uint64":
+                case "intp":
+                case "uintp":
+                case "int8_t":
+                case "uint8_t":
+                case "int16_t":
+                case "uint16_t":
+                case "int32_t":
+                case "uint32_t":
+                case "int64_t":
+                case "uint64_t":
+                case "size_t":
+                case "uintptr_t":
+                case "intptr_t":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool ResolveAliasToPrimitive(string name, Dictionary<string, List<CppTypedef>> typedefMap, Dictionary<string, bool> resolved, HashSet<string> visiting)
+        {
+            if (resolved.TryGetValue(name, out var cached))
+            {
+                return cached;
+            }
+
+            if (!typedefMap.TryGetValue(name, out var typedefs))
+            {
+                resolved[name] = false;
+                return false;
+            }
+
+            if (!visiting.Add(name))
+            {
+                resolved[name] = false;
+                return false;
+            }
+
+            foreach (var td in typedefs)
+            {
+                if (IsPrimitiveType(td.ElementType, typedefMap, resolved, visiting))
+                {
+                    resolved[name] = true;
+                    visiting.Remove(name);
+                    return true;
+                }
+            }
+
+            visiting.Remove(name);
+            resolved[name] = false;
+            return false;
+        }
+
+        private static bool IsPrimitiveType(CppType type, Dictionary<string, List<CppTypedef>> typedefMap, Dictionary<string, bool> resolved, HashSet<string> visiting)
+        {
+            if (type == null)
+            {
+                return false;
+            }
+
+            switch (type.TypeKind)
+            {
+                case CppTypeKind.Primitive:
+                    return true;
+                case CppTypeKind.Qualified:
+                    return IsPrimitiveType((type as CppTypeWithElementType).ElementType, typedefMap, resolved, visiting);
+                case CppTypeKind.Typedef:
+                    return ResolveAliasToPrimitive((type as CppTypedef).Name, typedefMap, resolved, visiting);
+                case CppTypeKind.Unexposed:
+                    {
+                        var ut = type as CppUnexposedType;
+                        if (ut == null) return false;
+                        if (IsPrimitiveAlias(ut.Name)) return true;
+                        return ResolveAliasToPrimitive(ut.Name, typedefMap, resolved, visiting);
+                    }
+                default:
+                    return false;
+            }
+        }
+
+        private static void CollectTypedefs(ICppDeclarationContainer container, List<CppTypedef> typedefs)
+        {
+            if (container == null)
+            {
+                return;
+            }
+
+            foreach (var td in container.Typedefs)
+            {
+                typedefs.Add(td);
+            }
+
+            foreach (var cls in container.Classes)
+            {
+                CollectTypedefs(cls, typedefs);
+            }
+
+            if (container is ICppGlobalDeclarationContainer global)
+            {
+                foreach (var ns in global.Namespaces)
+                {
+                    CollectTypedefs(ns, typedefs);
+                }
+            }
         }
 
         public static string ConvertToSiegeType(this CppType input, string templatedClassName = "")
@@ -194,13 +378,25 @@ namespace LuaExpose
             if (x.Contains("basic_string")) {
                 return x.Replace("basic_string", "String");
             }
+            if (x.Contains("std::string"))
+            {
+                return x.Replace("std::string", "String");
+            }
             if (x.Contains("Vec2<T, U>"))
             {
                 return x.Replace("Vec2<T, U>", templatedClassName);
             }
+            if (x.Contains("Vec2<T,U>"))
+            {
+                return x.Replace("Vec2<T,U>", templatedClassName);
+            }
             if (x.Contains("Rect<T, U>"))
             {
                 return x.Replace("Rect<T, U>", templatedClassName);
+            }
+            if (x.Contains("Rect<T,U>"))
+            {
+                return x.Replace("Rect<T,U>", templatedClassName);
             }
             if (x.Contains("shared_ptr") && input.TypeKind == CppTypeKind.StructOrClass)
             {

@@ -12,6 +12,7 @@ using System.Text;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using CommandLine;
+using LuaExpose.Parser;
 
 namespace LuaExpose
 {
@@ -28,7 +29,7 @@ namespace LuaExpose
             RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
     }
 
-    class Program
+    public class Program
     {
         public class Options
         {
@@ -59,11 +60,14 @@ namespace LuaExpose
             public string Declarations { get; set; }
             [Option('T', "tstemp", Required = false, HelpText = "TypeScript Output Template")]
             public string TypeScriptScrib { get; set; }
+
+            [Option("preprocess", Required = false, HelpText = "Enable macro preprocessing (requires clang/gcc/msvc in PATH)")]
+            public bool EnablePreprocessing { get; set; }
         }
 
         static void Main(string[] args)
         {
-            Parser.Default.ParseArguments<Options>(args)
+            CommandLine.Parser.Default.ParseArguments<Options>(args)
             .WithParsed(RunOptions);
         }
 
@@ -85,87 +89,7 @@ namespace LuaExpose
                 Console.WriteLine("Initial run, parsing all code");
             }
 
-            var f = Directory.EnumerateFiles(opts.RootSource, "*.h", SearchOption.AllDirectories);
-            CppParserOptions p = new CppParserOptions();
-            p.ParseComments = false;
-            p.Defines.Add("_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH");
-            p.Defines.Add("_HAS_DEPRECATED_RESULT_OF");
-            p.ParseSystemIncludes = false;
-            p.ParseAttributes = true;
-            p.ParseAsCpp = true;
-
-            p.AdditionalArguments.Add("-std=c++2a");
-            
-            p.AdditionalArguments.Add("-xc++");
-            p.AdditionalArguments.Add("-Wno-pragma-once-outside-header");
-            p.AdditionalArguments.Add("-Wno-unknown-attributes");
-            p.IncludeFolders.Add(opts.RootSource);
-            if (!opts.IsGame)
-                p.IncludeFolders.Add(opts.InputDirectory);
-            else
-                p.SystemIncludeFolders.Add(opts.InputDirectory);
-            p.SystemIncludeFolders.Add($"{opts.libs}/SDL3/include");
-            p.SystemIncludeFolders.Add($"{opts.libs}/parallel_hashmap/include");
-            p.SystemIncludeFolders.Add($"{opts.libs}/bgfx/include");
-            p.SystemIncludeFolders.Add($"{opts.libs}/luajit/include");
-            p.SystemIncludeFolders.Add($"{opts.libs}/sol/include");
-            p.SystemIncludeFolders.Add($"{opts.libs}/box2d/include");
-            p.SystemIncludeFolders.Add($"{opts.libs}/fmod/include");
-            p.SystemIncludeFolders.Add($"{opts.libs}/steam/include");
-            p.SystemIncludeFolders.Add($"{opts.libs}/fmt/include");
-            p.SystemIncludeFolders.Add($"{opts.libs}/GameNetworkingSockets/include");
-
-
-            if (OperatingSystem.IsMacOS())
-            {
-                p.TargetSystem = "darwin";
-                p.TargetVendor = "apple";
-                p.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include");
-                p.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1");
-                p.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
-                p.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/11.0.0/include");
-                p.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/11.0.3/include");
-                p.SystemIncludeFolders.Add($"{opts.libs}/bgfx/include/compat/osx");
-                p.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
-                p.SystemIncludeFolders.Add($"{opts.libs}/invoke/include");
-
-                p.AdditionalArguments.Add("-stdlib=libc++");
-            }
-            
-            if (OperatingSystem.IsLinux())
-            { 
-                p.TargetAbi = "gnu";
-                p.TargetSystem = "linux";
-                p.AdditionalArguments.Add("-stdlib=libc++");
-                p.SystemIncludeFolders.Add($"/usr/include/c++/v1");
-                p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu");
-                p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/8");
-                p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/9");
-                p.SystemIncludeFolders.Add($"/usr/include/c++/7");
-                p.SystemIncludeFolders.Add($"/usr/include/c++/9");
-                p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu");
-                p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/8");
-                p.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/9");
-                p.SystemIncludeFolders.Add($"/usr/lib/clang/{opts.CppVersion}/include");
-                p.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
-                p.SystemIncludeFolders.Add($"{opts.libs}/invoke/include");
-
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                p.SystemIncludeFolders.Add($"{opts.libs}/bgfx/include/compat/msvc");
-            }
-            
-            p.SystemIncludeFolders.Add($"{opts.InputDirectory}/external");
-
-
-            //var actualFiles = f.Where(x =>
-            //{
-            //    DateTimeOffset dto = (new FileInfo(x)).LastWriteTime;
-            //    return true;
-            //});
-            var actualFiles = f;
+            var actualFiles = Directory.EnumerateFiles(opts.RootSource, "*.h", SearchOption.AllDirectories);
             if (actualFiles.Count() == 0)
             {
                 Console.WriteLine("No new files to parse");
@@ -177,10 +101,75 @@ namespace LuaExpose
             Stopwatch stopWatch = new Stopwatch();
             stopWatch.Start();
 
-            Console.WriteLine($"Using libClang to parse {actualFiles.Count()} Files");
+            Console.WriteLine($"Parsing {actualFiles.Count()} Files");
 
-            p.ParseMacros = true;
-            var compilation = CppParser.ParseFiles(actualFiles.ToList(), p);
+            var parserOptions = new CppParserOptions
+            {
+                ParseComments = false,
+                ParseSystemIncludes = false,
+                ParseAttributes = true,
+                ParseAsCpp = true,
+                ParseMacros = true,
+                EnablePreprocessing = opts.EnablePreprocessing,
+                CppStandard = "c++20"
+            };
+
+            parserOptions.Defines.Add("_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH");
+            parserOptions.Defines.Add("_HAS_DEPRECATED_RESULT_OF");
+
+            parserOptions.IncludeFolders.Add(opts.RootSource);
+            if (!opts.IsGame)
+                parserOptions.IncludeFolders.Add(opts.InputDirectory);
+            else
+                parserOptions.SystemIncludeFolders.Add(opts.InputDirectory);
+
+            parserOptions.SystemIncludeFolders.Add($"{opts.libs}/SDL3/include");
+            parserOptions.SystemIncludeFolders.Add($"{opts.libs}/parallel_hashmap/include");
+            parserOptions.SystemIncludeFolders.Add($"{opts.libs}/bgfx/include");
+            parserOptions.SystemIncludeFolders.Add($"{opts.libs}/luajit/include");
+            parserOptions.SystemIncludeFolders.Add($"{opts.libs}/sol/include");
+            parserOptions.SystemIncludeFolders.Add($"{opts.libs}/box2d/include");
+            parserOptions.SystemIncludeFolders.Add($"{opts.libs}/fmod/include");
+            parserOptions.SystemIncludeFolders.Add($"{opts.libs}/steam/include");
+            parserOptions.SystemIncludeFolders.Add($"{opts.libs}/fmt/include");
+            parserOptions.SystemIncludeFolders.Add($"{opts.libs}/GameNetworkingSockets/include");
+
+            if (OperatingSystem.IsMacOS())
+            {
+                parserOptions.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include");
+                parserOptions.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1");
+                parserOptions.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
+                parserOptions.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/11.0.0/include");
+                parserOptions.SystemIncludeFolders.Add("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/11.0.3/include");
+                parserOptions.SystemIncludeFolders.Add($"{opts.libs}/bgfx/include/compat/osx");
+                parserOptions.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
+                parserOptions.SystemIncludeFolders.Add($"{opts.libs}/invoke/include");
+            }
+
+            if (OperatingSystem.IsLinux())
+            {
+                parserOptions.SystemIncludeFolders.Add($"/usr/include/c++/v1");
+                parserOptions.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu");
+                parserOptions.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/8");
+                parserOptions.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/9");
+                parserOptions.SystemIncludeFolders.Add($"/usr/include/c++/7");
+                parserOptions.SystemIncludeFolders.Add($"/usr/include/c++/9");
+                parserOptions.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu");
+                parserOptions.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/8");
+                parserOptions.SystemIncludeFolders.Add($"/usr/include/x86_64-linux-gnu/c++/9");
+                parserOptions.SystemIncludeFolders.Add($"/usr/lib/clang/{opts.CppVersion}/include");
+                parserOptions.SystemIncludeFolders.Add($"{opts.libs}/ghc/include");
+                parserOptions.SystemIncludeFolders.Add($"{opts.libs}/invoke/include");
+            }
+
+            if (OperatingSystem.IsWindows())
+            {
+                parserOptions.SystemIncludeFolders.Add($"{opts.libs}/bgfx/include/compat/msvc");
+            }
+
+            parserOptions.SystemIncludeFolders.Add($"{opts.InputDirectory}/external");
+
+            var compilation = CppParser.ParseFiles(actualFiles.ToList(), parserOptions);
 
             if (compilation.DumpErrorsIfAny())
             {

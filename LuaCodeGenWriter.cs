@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace LuaExpose
 {
@@ -23,6 +24,8 @@ namespace LuaExpose
             @"#include <base/Types.h>",
             @"#include <scripting/LuaCustomizations.h>",
         };
+
+        readonly Dictionary<string, List<string>> legacyTemplateOrderCache = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
         public LuaCodeGenWriter(CppCompilation compilation, string scrib, string rootNS) : base(compilation, scrib, rootNS)
         {
@@ -231,6 +234,85 @@ namespace LuaExpose
                 }
             }
 
+            CppClass UnwrapToClass(CppType type)
+            {
+                while (true)
+                {
+                    if (type is CppQualifiedType qt)
+                    {
+                        type = qt.ElementType;
+                        continue;
+                    }
+
+                    if (type is CppReferenceType rt)
+                    {
+                        type = rt.ElementType;
+                        continue;
+                    }
+
+                    if (type is CppPointerType pt)
+                    {
+                        type = pt.ElementType;
+                        continue;
+                    }
+
+                    if (type is CppArrayType at)
+                    {
+                        type = at.ElementType;
+                        continue;
+                    }
+
+                    if (type is CppTypedef td)
+                    {
+                        type = td.ElementType;
+                        continue;
+                    }
+
+                    return type as CppClass;
+                }
+            }
+
+            string GetSpanFile(CppClass cls)
+            {
+                if (cls == null)
+                {
+                    return string.Empty;
+                }
+
+                if (!string.IsNullOrEmpty(cls.Span.Start.File))
+                {
+                    return cls.Span.Start.File;
+                }
+
+                if (cls.Parent is CppNamespace ns && !string.IsNullOrEmpty(ns.Span.Start.File))
+                {
+                    return ns.Span.Start.File;
+                }
+
+                if (cls.Parent is CppClass pc && !string.IsNullOrEmpty(pc.Span.Start.File))
+                {
+                    return pc.Span.Start.File;
+                }
+
+                return string.Empty;
+            }
+
+            int CompareBySpanThenName(CppClass a, CppClass b)
+            {
+                var fileA = GetSpanFile(a);
+                var fileB = GetSpanFile(b);
+                var fileCmp = string.Compare(fileA, fileB, StringComparison.OrdinalIgnoreCase);
+                if (fileCmp != 0) return fileCmp;
+
+                var lineCmp = a.Span.Start.Line.CompareTo(b.Span.Start.Line);
+                if (lineCmp != 0) return lineCmp;
+
+                var colCmp = a.Span.Start.Column.CompareTo(b.Span.Start.Column);
+                if (colCmp != 0) return colCmp;
+
+                return string.Compare(a.Name, b.Name, StringComparison.Ordinal);
+            }
+
             var fullyQualifiedFunctionName = $"{lu.TypeName}::";
             if (lu.TypeNameLower == generatedNamespace)
             {
@@ -348,14 +430,16 @@ namespace LuaExpose
                     for (int j = 0; j < constructors.Count(); j++)
                     {
                         var of = constructors.ElementAt(j);
-                        var paramList = string.Join(',', of.Parameters.Select(x => x.GetRealParamValue()));
+                        var paramList = string.Join(',', of.Parameters.Select(x => x.Type.GetDisplayName()));
 
                         // we found a type and we need to make shit happen
-                        if (cccc != null && !string.IsNullOrEmpty(paramList) && cccc.GetCanonicalType() is CppClass cxz)
+                        if (!string.IsNullOrEmpty(paramList))
                         {
-                            var t_type = cxz.TemplateParameters.Count() > 0 ? cxz.TemplateParameters[0].GetDisplayName() : "";
-                           // var t_type = cxz.GetDisplayName().Split('<', '>')[1].Split(',')[0];
-                            paramList = paramList.Replace("T", t_type);
+                            var t_type = GetTypedefTemplateArgument(typeList[i]);
+                            if (!string.IsNullOrEmpty(t_type))
+                            {
+                                paramList = ReplaceTemplateType(paramList, "T", t_type);
+                            }
                         }
 
                         constructorsOutput.Append($"{typeList[i]}({paramList})");
@@ -524,6 +608,68 @@ namespace LuaExpose
                         {
                             WalkTypeTreeForBase(baseType, rootNamespace, ref thingsWeCareAbout);
                         }
+
+                        // Prefer legacy ordering if we can find it in an existing generated file.
+                        var legacyTemplateOrder = GetLegacyTemplateTypeOrder(lu, cpp, item);
+                        Dictionary<string, int> legacyTemplateOrderMap = null;
+                        if (legacyTemplateOrder.Count > 0)
+                        {
+                            legacyTemplateOrderMap = new Dictionary<string, int>(StringComparer.Ordinal);
+                            for (int idx = 0; idx < legacyTemplateOrder.Count; idx++)
+                            {
+                                if (!legacyTemplateOrderMap.ContainsKey(legacyTemplateOrder[idx]))
+                                {
+                                    legacyTemplateOrderMap.Add(legacyTemplateOrder[idx], idx);
+                                }
+                            }
+                        }
+
+                        // Prefer an ordering based on return types in the current class
+                        // (e.g. addX methods in Entity) to reduce diff noise, then fall
+                        // back to source order for deterministic output.
+                        var preferredOrder = new Dictionary<string, int>(StringComparer.Ordinal);
+                        if (cpp != null && thingsWeCareAbout.Count > 0)
+                        {
+                            var nameLookup = new HashSet<string>(thingsWeCareAbout.Select(x => x.Name), StringComparer.Ordinal);
+                            int nextIndex = 0;
+                            foreach (var fn in cpp.Functions)
+                            {
+                                var cls = UnwrapToClass(fn.ReturnType);
+                                if (cls == null)
+                                {
+                                    continue;
+                                }
+
+                                if (!nameLookup.Contains(cls.Name))
+                                {
+                                    continue;
+                                }
+
+                                if (!preferredOrder.ContainsKey(cls.Name))
+                                {
+                                    preferredOrder[cls.Name] = nextIndex++;
+                                }
+                            }
+                        }
+
+                        thingsWeCareAbout.Sort((a, b) =>
+                        {
+                            if (legacyTemplateOrderMap != null)
+                            {
+                                var hasLegacyA = legacyTemplateOrderMap.TryGetValue(a.Name, out var la);
+                                var hasLegacyB = legacyTemplateOrderMap.TryGetValue(b.Name, out var lb);
+                                if (hasLegacyA && hasLegacyB) return la.CompareTo(lb);
+                                if (hasLegacyA) return -1;
+                                if (hasLegacyB) return 1;
+                            }
+
+                            var hasA = preferredOrder.TryGetValue(a.Name, out var ia);
+                            var hasB = preferredOrder.TryGetValue(b.Name, out var ib);
+                            if (hasA && hasB) return ia.CompareTo(ib);
+                            if (hasA) return -1;
+                            if (hasB) return 1;
+                            return CompareBySpanThenName(a, b);
+                        });
 
                         for (int w = 0; w < thingsWeCareAbout.Count; w++)
                         {
@@ -717,9 +863,22 @@ namespace LuaExpose
             List<string> usings = new List<string>();
 
             LinkedList<string> namespaces = new LinkedList<string>();
-            LinkedList<string> classes = new LinkedList<string>();
+            List<string> classes = new List<string>();
             LinkedList<string> enums = new LinkedList<string>();
             List<string> includes = new List<string>();
+            var legacyEnumOrder = GetLegacyEnumOrder(value, fileName);
+            Dictionary<string, int> legacyEnumOrderMap = null;
+            if (legacyEnumOrder.Count > 0)
+            {
+                legacyEnumOrderMap = new Dictionary<string, int>(StringComparer.Ordinal);
+                for (int i = 0; i < legacyEnumOrder.Count; i++)
+                {
+                    if (!legacyEnumOrderMap.ContainsKey(legacyEnumOrder[i]))
+                    {
+                        legacyEnumOrderMap.Add(legacyEnumOrder[i], i);
+                    }
+                }
+            }
 
             value.userTypes.AsParallel().ForAll(x =>
             {
@@ -785,18 +944,71 @@ namespace LuaExpose
 
                 }
 
-                if (lu.IsClass)
-                {
-                    foreach (var f in lu.Classes)
+                    if (lu.IsClass)
                     {
-                        classes.AddLast(GenerateUserType(lu, f, ref includes));
+                        foreach (var f in lu.Classes)
+                        {
+                            classes.Add(GenerateUserType(lu, f, ref includes));
+                        }
                     }
-                }
 
                 foreach (var e in lu.Enums)
                 {
+                    if (legacyEnumOrderMap == null)
+                    {
+                        enums.AddLast(GenerateEnum(lu, e, ref includes));
+                        continue;
+                    }
+
+                    // Defer ordering until we have the full list.
                     enums.AddLast(GenerateEnum(lu, e, ref includes));
                 }
+            }
+
+            if (legacyEnumOrderMap != null && legacyEnumOrderMap.Count > 0)
+            {
+                var orderedEnums = enums
+                    .Select(x => x)
+                    .ToList();
+
+                orderedEnums.Sort((a, b) =>
+                {
+                    var nameA = ExtractEnumName(a);
+                    var nameB = ExtractEnumName(b);
+                    var hasA = legacyEnumOrderMap.TryGetValue(nameA, out var ia);
+                    var hasB = legacyEnumOrderMap.TryGetValue(nameB, out var ib);
+                    if (hasA && hasB) return ia.CompareTo(ib);
+                    if (hasA) return -1;
+                    if (hasB) return 1;
+                    return string.Compare(nameA, nameB, StringComparison.Ordinal);
+                });
+
+                enums = new LinkedList<string>(orderedEnums);
+            }
+
+            var legacyClassOrder = GetLegacyClassOrder(value);
+            if (legacyClassOrder.Count > 0)
+            {
+                var legacyClassOrderMap = new Dictionary<string, int>(StringComparer.Ordinal);
+                for (int i = 0; i < legacyClassOrder.Count; i++)
+                {
+                    if (!legacyClassOrderMap.ContainsKey(legacyClassOrder[i]))
+                    {
+                        legacyClassOrderMap.Add(legacyClassOrder[i], i);
+                    }
+                }
+
+                classes.Sort((a, b) =>
+                {
+                    var nameA = ExtractUsertypeName(a);
+                    var nameB = ExtractUsertypeName(b);
+                    var hasA = legacyClassOrderMap.TryGetValue(nameA, out var ia);
+                    var hasB = legacyClassOrderMap.TryGetValue(nameB, out var ib);
+                    if (hasA && hasB) return ia.CompareTo(ib);
+                    if (hasA) return -1;
+                    if (hasB) return 1;
+                    return string.Compare(nameA, nameB, StringComparison.Ordinal);
+                });
             }
 
             if (includes.Any(x => x.Contains("ui/")))
@@ -816,6 +1028,351 @@ namespace LuaExpose
 
             var scribe = Template.Parse(File.ReadAllText(template));
             return scribe.Render(new { Includes = includes.Distinct(), Namespace = generatedNamespace, Ltype = fileName.FirstCharToUpper(), Namespaces = namespaces, Classes = classes, Enums = enums, Usings = usings});
+        }
+
+        private List<string> GetLegacyEnumOrder(LuaUserTypeFile value, string fileName)
+        {
+            var order = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var candidateFile = GetUsertypeFileName(value.path);
+            var candidates = new List<string>();
+
+            var dir = Path.GetDirectoryName(value.path);
+            while (!string.IsNullOrEmpty(dir))
+            {
+                var candidate = Path.Combine(dir, "scripting", "usertypes", candidateFile);
+                if (File.Exists(candidate))
+                {
+                    candidates.Add(candidate);
+                    break;
+                }
+                dir = Directory.GetParent(dir)?.FullName;
+            }
+
+            if (!string.IsNullOrEmpty(outputDirectory))
+            {
+                var outputCandidate = Path.Combine(outputDirectory, candidateFile);
+                if (File.Exists(outputCandidate))
+                {
+                    candidates.Add(outputCandidate);
+                }
+            }
+
+            foreach (var path in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                var content = File.ReadAllText(path);
+                foreach (Match match in Regex.Matches(content, @"state\.new_enum(?:<[^>]+>)?\(\""(?<name>[A-Za-z_][A-Za-z0-9_]*)\"""))
+                {
+                    var name = match.Groups["name"].Value;
+                    if (string.IsNullOrEmpty(name))
+                    {
+                        continue;
+                    }
+
+                    if (seen.Add(name))
+                    {
+                        order.Add(name);
+                    }
+                }
+            }
+
+            return order;
+        }
+
+        private List<string> GetLegacyClassOrder(LuaUserTypeFile value)
+        {
+            var order = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var candidateFile = GetUsertypeFileName(value.path);
+            var candidates = new List<string>();
+
+            var dir = Path.GetDirectoryName(value.path);
+            while (!string.IsNullOrEmpty(dir))
+            {
+                var candidate = Path.Combine(dir, "scripting", "usertypes", candidateFile);
+                if (File.Exists(candidate))
+                {
+                    candidates.Add(candidate);
+                    break;
+                }
+                dir = Directory.GetParent(dir)?.FullName;
+            }
+
+            if (!string.IsNullOrEmpty(outputDirectory))
+            {
+                var outputCandidate = Path.Combine(outputDirectory, candidateFile);
+                if (File.Exists(outputCandidate))
+                {
+                    candidates.Add(outputCandidate);
+                }
+            }
+
+            foreach (var path in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                var content = File.ReadAllText(path);
+                foreach (Match match in Regex.Matches(content, @"state\.new_usertype(?:<[^>]+>)?\(\""(?<name>[A-Za-z_][A-Za-z0-9_]*)\"""))
+                {
+                    var name = match.Groups["name"].Value;
+                    if (string.IsNullOrEmpty(name))
+                    {
+                        continue;
+                    }
+
+                    if (seen.Add(name))
+                    {
+                        order.Add(name);
+                    }
+                }
+            }
+
+            return order;
+        }
+
+        private static string ExtractEnumName(string enumBlock)
+        {
+            if (string.IsNullOrEmpty(enumBlock))
+            {
+                return string.Empty;
+            }
+
+            var match = Regex.Match(enumBlock, @"state\.new_enum(?:<[^>]+>)?\(\""(?<name>[A-Za-z_][A-Za-z0-9_]*)\""");
+            return match.Success ? match.Groups["name"].Value : string.Empty;
+        }
+
+        private static string ExtractUsertypeName(string classBlock)
+        {
+            if (string.IsNullOrEmpty(classBlock))
+            {
+                return string.Empty;
+            }
+
+            var match = Regex.Match(classBlock, @"state\.new_usertype(?:<[^>]+>)?\(\""(?<name>[A-Za-z_][A-Za-z0-9_]*)\""");
+            return match.Success ? match.Groups["name"].Value : string.Empty;
+        }
+
+        private string GetTypedefTemplateArgument(string typedefName)
+        {
+            if (string.IsNullOrWhiteSpace(typedefName))
+            {
+                return string.Empty;
+            }
+
+            var typedef = compiledCode.FindByName<CppTypedef>(rootNamespace, typedefName);
+            if (typedef == null)
+            {
+                return string.Empty;
+            }
+
+            if (typedef.ElementType is CppClass cls && cls.TemplateParameters.Count > 0)
+            {
+                return NormalizeTemplateArgument(cls.TemplateParameters[0].GetDisplayName());
+            }
+
+            var canonical = typedef.GetCanonicalType();
+            if (canonical is CppClass c && c.TemplateParameters.Count > 0)
+            {
+                return NormalizeTemplateArgument(c.TemplateParameters[0].GetDisplayName());
+            }
+
+            if (typedef.ElementType is CppUnexposedType ut)
+            {
+                return NormalizeTemplateArgument(ExtractFirstTemplateArgument(ut.Name));
+            }
+
+            if (canonical is CppUnexposedType cut)
+            {
+                return NormalizeTemplateArgument(ExtractFirstTemplateArgument(cut.Name));
+            }
+
+            if (typedef.ElementType is CppTypedef inner)
+            {
+                return GetTypedefTemplateArgument(inner.Name);
+            }
+
+            return string.Empty;
+        }
+
+        private static string NormalizeTemplateArgument(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            var trimmed = value.Trim();
+            if (trimmed == "int32_t")
+            {
+                return "int";
+            }
+
+            return trimmed;
+        }
+
+        private static string ReplaceTemplateType(string paramList, string templateName, string actualType)
+        {
+            if (string.IsNullOrEmpty(paramList) || string.IsNullOrEmpty(templateName) || string.IsNullOrEmpty(actualType))
+            {
+                return paramList;
+            }
+
+            return Regex.Replace(paramList, $@"\b{Regex.Escape(templateName)}\b", actualType);
+        }
+
+        private static string ExtractFirstTemplateArgument(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return string.Empty;
+            }
+
+            var lt = name.IndexOf('<');
+            var gt = name.LastIndexOf('>');
+            if (lt < 0 || gt <= lt)
+            {
+                return string.Empty;
+            }
+
+            var args = name.Substring(lt + 1, gt - lt - 1);
+            int depth = 0;
+            for (int i = 0; i < args.Length; i++)
+            {
+                var ch = args[i];
+                if (ch == '<') depth++;
+                else if (ch == '>') depth--;
+                else if (ch == ',' && depth == 0)
+                {
+                    var first = args.Substring(0, i).Trim();
+                    return StripTemplateParamPrefix(first);
+                }
+            }
+
+            return StripTemplateParamPrefix(args.Trim());
+        }
+
+        private static string StripTemplateParamPrefix(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            var trimmed = value.Trim();
+            if (trimmed.StartsWith("class ", StringComparison.Ordinal))
+            {
+                return trimmed.Substring(6).Trim();
+            }
+            if (trimmed.StartsWith("struct ", StringComparison.Ordinal))
+            {
+                return trimmed.Substring(7).Trim();
+            }
+            if (trimmed.StartsWith("typename ", StringComparison.Ordinal))
+            {
+                return trimmed.Substring(9).Trim();
+            }
+
+            return trimmed;
+        }
+
+        private List<string> GetLegacyTemplateTypeOrder(LuaUserType lu, CppClass cpp, CppFunction func)
+        {
+            if (lu == null || cpp == null || func == null)
+            {
+                return new List<string>();
+            }
+
+            var candidateFile = GetUsertypeFileName(lu.OriginLocation);
+            var candidates = new List<string>();
+
+            var dir = Path.GetDirectoryName(lu.OriginLocation);
+            while (!string.IsNullOrEmpty(dir))
+            {
+                var candidate = Path.Combine(dir, "scripting", "usertypes", candidateFile);
+                if (File.Exists(candidate))
+                {
+                    candidates.Add(candidate);
+                    break;
+                }
+                dir = Directory.GetParent(dir)?.FullName;
+            }
+
+            if (!string.IsNullOrEmpty(outputDirectory))
+            {
+                var outputCandidate = Path.Combine(outputDirectory, candidateFile);
+                if (File.Exists(outputCandidate))
+                {
+                    candidates.Add(outputCandidate);
+                }
+            }
+
+            foreach (var path in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var key = $"{path}|{cpp.Name}|{func.Name}";
+                if (legacyTemplateOrderCache.TryGetValue(key, out var cached))
+                {
+                    return cached;
+                }
+
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                var content = File.ReadAllText(path);
+                var list = new List<string>();
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                var pattern = $@"&{Regex.Escape(cpp.Name)}::\s*{Regex.Escape(func.Name)}\s*<(?<type>[^>]+)>";
+                foreach (Match match in Regex.Matches(content, pattern))
+                {
+                    var rawType = match.Groups["type"].Value;
+                    var typeName = NormalizeTypeName(rawType);
+                    if (string.IsNullOrEmpty(typeName))
+                    {
+                        continue;
+                    }
+
+                    if (seen.Add(typeName))
+                    {
+                        list.Add(typeName);
+                    }
+                }
+
+                legacyTemplateOrderCache[key] = list;
+                if (list.Count > 0)
+                {
+                    return list;
+                }
+            }
+
+            return new List<string>();
+        }
+
+        private static string NormalizeTypeName(string rawType)
+        {
+            if (string.IsNullOrWhiteSpace(rawType))
+            {
+                return string.Empty;
+            }
+
+            var typeName = rawType.Trim();
+            typeName = typeName.Replace("const", string.Empty).Trim();
+            typeName = typeName.Trim('&', '*', ' ');
+            var lastScope = typeName.LastIndexOf("::", StringComparison.Ordinal);
+            if (lastScope >= 0 && lastScope + 2 < typeName.Length)
+            {
+                typeName = typeName.Substring(lastScope + 2);
+            }
+
+            return typeName.Trim();
         }
 
         protected override string GetUsertypeFileName(string usertypeFile)
@@ -863,9 +1420,39 @@ REPLACEMEWITHTEXT
             StringBuilder fileContent = new StringBuilder();
             string originalContent = File.Exists(newPath) ? File.ReadAllText(newPath) : "";
 
-            foreach (var item in userTypeFiles)
+            var legacyOrder = GetLegacyUsertypeCallOrder(userTypeFiles);
+            Dictionary<string, int> legacyOrderMap = null;
+            if (legacyOrder.Count > 0)
             {
-                fileContent.Append($"        lua_expose_usertypes_{Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()}(state);\n");
+                legacyOrderMap = new Dictionary<string, int>(StringComparer.Ordinal);
+                for (int i = 0; i < legacyOrder.Count; i++)
+                {
+                    if (!legacyOrderMap.ContainsKey(legacyOrder[i]))
+                    {
+                        legacyOrderMap.Add(legacyOrder[i], i);
+                    }
+                }
+            }
+
+            var orderedKeys = userTypeFiles.Keys.ToList();
+            if (legacyOrderMap != null)
+            {
+                orderedKeys.Sort((a, b) =>
+                {
+                    var nameA = Path.GetFileNameWithoutExtension(a).FirstCharToUpper();
+                    var nameB = Path.GetFileNameWithoutExtension(b).FirstCharToUpper();
+                    var hasA = legacyOrderMap.TryGetValue(nameA, out var ia);
+                    var hasB = legacyOrderMap.TryGetValue(nameB, out var ib);
+                    if (hasA && hasB) return ia.CompareTo(ib);
+                    if (hasA) return -1;
+                    if (hasB) return 1;
+                    return string.Compare(nameA, nameB, StringComparison.Ordinal);
+                });
+            }
+
+            foreach (var key in orderedKeys)
+            {
+                fileContent.Append($"        lua_expose_usertypes_{Path.GetFileNameWithoutExtension(key).FirstCharToUpper()}(state);\n");
             }
 
             if (!isGame)
@@ -897,9 +1484,9 @@ REPLACEMEWITHTEXT
             originalContent = File.Exists(newPath) ? File.ReadAllText(newPath) : "";
             fileContent.Clear();
 
-            foreach (var item in userTypeFiles)
+            foreach (var key in orderedKeys)
             {
-                fileContent.Append($"    void lua_expose_usertypes_{Path.GetFileNameWithoutExtension(item.Key).FirstCharToUpper()}(sol::state_view& state);\n");
+                fileContent.Append($"    void lua_expose_usertypes_{Path.GetFileNameWithoutExtension(key).FirstCharToUpper()}(sol::state_view& state);\n");
             }
 
             if (!isGame)
@@ -923,6 +1510,71 @@ REPLACEMEWITHTEXT
             {
                 WriteFileContent(content, newPath);
             }
+        }
+
+        private List<string> GetLegacyUsertypeCallOrder(Dictionary<string, LuaUserTypeFile> userTypeFiles)
+        {
+            var order = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var candidates = new List<string>();
+
+            foreach (var value in userTypeFiles.Values)
+            {
+                var dir = Path.GetDirectoryName(value.path);
+                while (!string.IsNullOrEmpty(dir))
+                {
+                    var candidate = Path.Combine(dir, "scripting", "usertypes", "LuaUsertypes.cpp");
+                    if (File.Exists(candidate))
+                    {
+                        candidates.Add(candidate);
+                        break;
+                    }
+                    dir = Directory.GetParent(dir)?.FullName;
+                }
+                if (candidates.Count > 0)
+                {
+                    break;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(outputDirectory))
+            {
+                var outputCandidate = Path.Combine(outputDirectory, "LuaUsertypes.cpp");
+                if (File.Exists(outputCandidate))
+                {
+                    candidates.Add(outputCandidate);
+                }
+            }
+
+            foreach (var path in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                var content = File.ReadAllText(path);
+                foreach (Match match in Regex.Matches(content, @"lua_expose_usertypes_(?<name>[A-Za-z0-9_]+)\(state\)"))
+                {
+                    var name = match.Groups["name"].Value;
+                    if (string.IsNullOrEmpty(name))
+                    {
+                        continue;
+                    }
+
+                    if (seen.Add(name))
+                    {
+                        order.Add(name);
+                    }
+                }
+
+                if (order.Count > 0)
+                {
+                    return order;
+                }
+            }
+
+            return order;
         }
     }
 }
