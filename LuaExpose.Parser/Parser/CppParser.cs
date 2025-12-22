@@ -1,10 +1,12 @@
 // LuaExpose.Parser - Custom C++ Recursive Descent Parser
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using CppAst;
 using LuaExpose.Parser.Lexer;
 using LuaExpose.Parser.Preprocessor;
@@ -21,6 +23,9 @@ namespace LuaExpose.Parser
         public bool ParseAttributes { get; set; } = true;
         public bool ParseAsCpp { get; set; } = true;
         public bool ParseMacros { get; set; } = false;
+        public bool ParseInParallel { get; set; } = true;
+        public bool FilterFilesWithoutLuaAttributes { get; set; } = true;
+        public int MaxDegreeOfParallelism { get; set; } = Environment.ProcessorCount;
         public List<string> Defines { get; } = new List<string>();
         public List<string> IncludeFolders { get; } = new List<string>();
         public List<string> SystemIncludeFolders { get; } = new List<string>();
@@ -49,14 +54,29 @@ namespace LuaExpose.Parser
             var compilation = new CppCompilation();
             options ??= new CppParserOptions();
 
-            foreach (var file in files)
+            var parseResults = new ConcurrentBag<CppCompilation>();
+            var parallelOptions = new ParallelOptions
             {
+                MaxDegreeOfParallelism = options.MaxDegreeOfParallelism <= 0 ? Environment.ProcessorCount : options.MaxDegreeOfParallelism
+            };
+
+            Action<string> parseFile = file =>
+            {
+                var localCompilation = new CppCompilation();
                 try
                 {
                     if (!File.Exists(file))
                     {
-                        compilation.Diagnostics.Error($"File not found: {file}");
-                        continue;
+                        localCompilation.Diagnostics.Error($"File not found: {file}");
+                        parseResults.Add(localCompilation);
+                        return;
+                    }
+
+                    string rawSource = File.ReadAllText(file);
+
+                    if (options.FilterFilesWithoutLuaAttributes && !ContainsLuaMarkers(rawSource))
+                    {
+                        return;
                     }
 
                     string source;
@@ -80,8 +100,8 @@ namespace LuaExpose.Parser
                         var ppResult = CppPreprocessor.PreprocessFile(file, ppOptions);
                         if (!ppResult.Success)
                         {
-                            compilation.Diagnostics.Warning($"Preprocessing failed for {file}, parsing raw source. Error: {ppResult.ErrorOutput}");
-                            source = ExpandSimpleMacros(File.ReadAllText(file));
+                            localCompilation.Diagnostics.Warning($"Preprocessing failed for {file}, parsing raw source. Error: {ppResult.ErrorOutput}");
+                            source = ExpandSimpleMacros(rawSource);
                         }
                         else
                         {
@@ -90,15 +110,41 @@ namespace LuaExpose.Parser
                     }
                     else
                     {
-                        source = ExpandSimpleMacros(File.ReadAllText(file));
+                        source = ExpandSimpleMacros(rawSource);
                     }
 
-                    ParseSource(source, file, compilation, options);
+                    ParseSource(source, file, localCompilation, options);
                 }
                 catch (Exception ex)
                 {
-                    compilation.Diagnostics.Error($"Error parsing {file}: {ex.Message}");
+                    localCompilation.Diagnostics.Error($"Error parsing {file}: {ex.Message}");
                 }
+                finally
+                {
+                    parseResults.Add(localCompilation);
+                }
+            };
+
+            if (options.ParseInParallel && files.Count > 1)
+            {
+                Parallel.ForEach(files, parallelOptions, parseFile);
+            }
+            else
+            {
+                foreach (var file in files)
+                {
+                    parseFile(file);
+                }
+            }
+
+            foreach (var local in parseResults)
+            {
+                if (local == null) continue;
+                foreach (var message in local.Diagnostics.Messages)
+                {
+                    compilation.Diagnostics.Log(message);
+                }
+                MergeCompilation(compilation, local);
             }
 
             ResolveTypes(compilation);
@@ -158,6 +204,112 @@ namespace LuaExpose.Parser
             var tokens = lexer.Tokenize();
             var parser = new CppParserImpl(tokens, compilation, options, filename);
             parser.Parse();
+        }
+
+        private static bool ContainsLuaMarkers(string source)
+        {
+            if (string.IsNullOrEmpty(source)) return false;
+            return source.Contains("LUA_", StringComparison.Ordinal);
+        }
+
+        private static void MergeCompilation(CppCompilation target, CppCompilation source)
+        {
+            if (target == null || source == null) return;
+            MergeContainer(target, source);
+            if (source.System != null && target.System != null)
+            {
+                MergeContainer(target.System, source.System);
+            }
+        }
+
+        private static void MergeContainer(ICppGlobalDeclarationContainer target, ICppGlobalDeclarationContainer source)
+        {
+            if (target == null || source == null) return;
+
+            foreach (var attr in source.Attributes)
+            {
+                target.Attributes.Add(attr);
+            }
+
+            foreach (var field in source.Fields)
+            {
+                target.Fields.Add(field);
+            }
+
+            foreach (var func in source.Functions)
+            {
+                target.Functions.Add(func);
+            }
+
+            foreach (var en in source.Enums)
+            {
+                target.Enums.Add(en);
+            }
+
+            foreach (var cls in source.Classes)
+            {
+                target.Classes.Add(cls);
+            }
+
+            foreach (var td in source.Typedefs)
+            {
+                target.Typedefs.Add(td);
+            }
+
+            foreach (var ns in source.Namespaces)
+            {
+                MergeNamespace(target, ns);
+            }
+        }
+
+        private static void MergeNamespace(ICppGlobalDeclarationContainer targetContainer, CppNamespace sourceNamespace)
+        {
+            if (targetContainer == null || sourceNamespace == null) return;
+
+            var existing = targetContainer.Namespaces.FirstOrDefault(n => n.Name == sourceNamespace.Name);
+            if (existing == null)
+            {
+                targetContainer.Namespaces.Add(sourceNamespace);
+                return;
+            }
+
+            foreach (var attr in sourceNamespace.Attributes)
+            {
+                if (!existing.Attributes.Any(a => a.Name == attr.Name && a.Arguments == attr.Arguments && a.Scope == attr.Scope))
+                {
+                    existing.Attributes.Add(attr);
+                }
+            }
+
+            foreach (var field in sourceNamespace.Fields)
+            {
+                existing.Fields.Add(field);
+            }
+
+            foreach (var func in sourceNamespace.Functions)
+            {
+                existing.Functions.Add(func);
+            }
+
+            foreach (var en in sourceNamespace.Enums)
+            {
+                existing.Enums.Add(en);
+            }
+
+            foreach (var cls in sourceNamespace.Classes)
+            {
+                existing.Classes.Add(cls);
+            }
+
+            foreach (var td in sourceNamespace.Typedefs)
+            {
+                existing.Typedefs.Add(td);
+            }
+
+            foreach (var nested in sourceNamespace.Namespaces)
+            {
+                MergeNamespace(existing, nested);
+            }
         }
 
         private static string ExpandSimpleMacros(string source)
@@ -1715,7 +1867,6 @@ namespace LuaExpose.Parser
             bool hasShort = false;
             bool hasLong = false;
             int longCount = 0;
-            bool hasInt = false;
 
             while (true)
             {
@@ -1723,7 +1874,7 @@ namespace LuaExpose.Parser
                 else if (Check(TokenType.Unsigned)) { isSigned = false; Advance(); }
                 else if (Check(TokenType.Short)) { hasShort = true; Advance(); }
                 else if (Check(TokenType.Long)) { hasLong = true; longCount++; Advance(); }
-                else if (Check(TokenType.Int)) { hasInt = true; Advance(); }
+                else if (Check(TokenType.Int)) { Advance(); }
                 else if (Check(TokenType.Char)) { Advance(); return isSigned ? CppPrimitiveType.Char : CppPrimitiveType.UnsignedChar; }
                 else break;
             }
